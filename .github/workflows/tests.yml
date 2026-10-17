@@ -1,0 +1,90 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} / Django ${{ matrix.django }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+        django: ["5.1", "5.2", "6.0"]
+        exclude:
+          - python: "3.10" # Django 6.0 needs Python 3.12+
+            django: "6.0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install "Django~=${{ matrix.django }}.0" -e ".[dev]"
+      - run: python -m pytest -q
+
+  postgres:
+    name: PostgreSQL (row locking)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kvn_notify
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      KVN_TEST_DB: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]" "psycopg[binary]"
+      - run: python -m pytest -q
+
+  javascript:
+    name: JavaScript (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ["20", "22"]
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Static copies are up to date
+        run: |
+          node scripts/build-static.mjs
+          git diff --exit-code -- ../src/kvn_notify/static/kvn_notify/ \
+            || (echo "Run 'node js/scripts/build-static.mjs' and commit the result." && exit 1)
+
+  lint-and-build:
+    name: Lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff build
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: python -m build
+      - name: Package contains templates, static files and migrations
+        run: |
+          unzip -l dist/*.whl | grep -q "kvn_notify/templates/kvn_notify/email/base.html"
+          unzip -l dist/*.whl | grep -q "kvn_notify/static/kvn_notify/sw.js"
+          unzip -l dist/*.whl | grep -q "kvn_notify/migrations/0001_initial.py"

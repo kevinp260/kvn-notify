@@ -1,0 +1,44 @@
+{
+  "name": "kvn-notify-web",
+  "version": "0.1.0",
+  "description": "Browser client and service worker handlers for kvn-notify (Django push notifications). Works with any frontend.",
+  "license": "MIT",
+  "author": "Kevin Piranjani",
+  "type": "module",
+  "main": "./src/client.js",
+  "types": "./src/client.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/client.d.ts",
+      "default": "./src/client.js"
+    },
+    "./sw": {
+      "types": "./src/sw.d.ts",
+      "default": "./src/sw.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build:static": "node scripts/build-static.mjs"
+  },
+  "keywords": [
+    "django",
+    "web push",
+    "push notifications",
+    "service worker",
+    "pwa"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevinp260/kvn-notify.git",
+    "directory": "js"
+  },
+  "homepage": "https://kevinp260.github.io/kvn-notify/",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,50 @@
+# Publishes to PyPI and npm when a version tag (v0.1.0, ...) is pushed.
+#
+# One-time setup, before the first release:
+# - PyPI: add a "trusted publisher" for this repo and this workflow (release.yml),
+#   environment "release". No password or token is stored anywhere.
+# - npm: add a trusted publisher for this repo and workflow on npmjs.com, the same idea.
+# - GitHub: Settings > Environments > New environment "release".
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tag matches the package version
+        run: |
+          VERSION=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          test "v$VERSION" = "${GITHUB_REF_NAME}" || (echo "Tag ${GITHUB_REF_NAME} != version $VERSION" && exit 1)
+      - run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  npm:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Tag matches the package version
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+      - run: npm install -g npm@latest
+      - run: npm publish --provenance --access public

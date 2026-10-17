@@ -1,0 +1,13 @@
+{% extends "demo/base.html" %}
+{% block content %}
+<h1>Inbox</h1>
+<ul>
+  {% for notification in notifications %}
+  <li class="{% if not notification.read_at %}unread{% endif %}">
+    {{ notification.title }} <span class="note">{{ notification.created_at|timesince }} ago</span>
+  </li>
+  {% empty %}
+  <li>Nothing yet.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

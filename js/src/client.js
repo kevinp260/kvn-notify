@@ -40,6 +40,33 @@ function readCookie(name) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
 }
 
+const NO_WORKER_MESSAGE =
+  "No service worker controls this page. Register one whose scope covers the page " +
+  "(see the kvn-notify docs), or pass `serviceWorker` to createClient().";
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => reject(new KvnNotifyError(message, { code: "no-service-worker" })), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function waitForActive(reg, ms) {
+  if (reg.active) return Promise.resolve(reg);
+  const worker = reg.installing || reg.waiting;
+  const activated = new Promise((resolve, reject) => {
+    if (!worker) return reject(new KvnNotifyError(NO_WORKER_MESSAGE, { code: "no-service-worker" }));
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "activated") resolve(reg);
+      if (worker.state === "redundant") {
+        reject(new KvnNotifyError("The service worker failed to install.", { code: "no-service-worker" }));
+      }
+    });
+  });
+  return withTimeout(activated, ms, NO_WORKER_MESSAGE);
+}
+
 function sameKey(subscription, keyBytes) {
   const current = subscription.options && subscription.options.applicationServerKey;
   if (!current) return false;
@@ -58,6 +85,7 @@ function sameKey(subscription, keyBytes) {
  *   Extra headers per request, e.g. async () => ({ Authorization: `Bearer ${token}` }).
  * @param {string} [options.csrfCookieName="csrftoken"] Django's CSRF cookie, sent as X-CSRFToken for sessions.
  * @param {string} [options.serviceWorker] URL of a service worker to register, if the app has none of its own.
+ * @param {number} [options.readyTimeout=10000] Milliseconds to wait for a service worker before failing.
  */
 export function createClient(options = {}) {
   const {
@@ -66,6 +94,7 @@ export function createClient(options = {}) {
     getHeaders,
     csrfCookieName = "csrftoken",
     serviceWorker,
+    readyTimeout = 10000,
   } = options;
   const base = baseUrl.replace(/\/+$/, "");
 
@@ -103,16 +132,22 @@ export function createClient(options = {}) {
       throw new KvnNotifyError("This browser does not support push notifications.", { code: "unsupported" });
     }
     if (serviceWorker) {
-      await navigator.serviceWorker.register(serviceWorker);
-      const reg = await navigator.serviceWorker.getRegistration(serviceWorker);
-      if (reg) return reg;
+      return waitForActive(await navigator.serviceWorker.register(serviceWorker), readyTimeout);
     }
-    return navigator.serviceWorker.ready;
+    // `ready` never settles when no service worker covers this page, so give up
+    // with a clear message instead of leaving the button waiting forever.
+    return withTimeout(navigator.serviceWorker.ready, readyTimeout, NO_WORKER_MESSAGE);
   }
 
   async function currentSubscription() {
     if (!isSupported()) return null;
-    const reg = await registration();
+    let reg;
+    try {
+      reg = await registration();
+    } catch (error) {
+      if (error instanceof KvnNotifyError && error.code === "no-service-worker") return null;
+      throw error;
+    }
     return reg.pushManager.getSubscription();
   }
 

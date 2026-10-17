@@ -1,7 +1,7 @@
 export class KvnNotifyError extends Error {
   /** HTTP status for server errors, 0 otherwise. */
   status: number;
-  /** "http", "unsupported", "permission-denied" or "error". */
+  /** "http", "unsupported", "permission-denied", "no-service-worker" or "error". */
   code: string;
 }
 
@@ -16,6 +16,8 @@ export interface ClientOptions {
   csrfCookieName?: string;
   /** URL of a service worker to register, for apps without one of their own. */
   serviceWorker?: string;
+  /** Milliseconds to wait for a service worker before failing with code "no-service-worker". Default 10000. */
+  readyTimeout?: number;
 }
 
 export interface InboxItem {

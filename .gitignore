@@ -28,3 +28,8 @@ site/
 
 # Local secrets
 .env
+
+# Example projects
+examples/*/data/
+examples/*/*/data/
+examples/**/dist/

@@ -65,3 +65,6 @@ extend-exclude = ["src/kvn_notify/migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kvn_notify", "tests", "project", "demo", "api"]

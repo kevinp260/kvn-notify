@@ -1,0 +1,2 @@
+kvn-notify[drf]
+djangorestframework-simplejwt>=5.3

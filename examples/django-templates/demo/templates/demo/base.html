@@ -1,0 +1,48 @@
+{% load static kvn_notify %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kvn-notify demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #111827; }
+    nav { display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
+    button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid #2563eb; background: #2563eb; color: #fff; cursor: pointer; }
+    button[disabled] { opacity: .5; cursor: default; }
+    .secondary { background: #fff; color: #2563eb; }
+    .note { color: #4b5563; font-size: 14px; }
+    .message { padding: 8px 12px; background: #ecfdf5; border-radius: 6px; }
+    li.unread { font-weight: 600; }
+  </style>
+</head>
+<body>
+  {% if user.is_authenticated %}
+  <nav>
+    <a href="{% url 'home' %}">Home</a>
+    <a href="{% url 'inbox' %}">Inbox ({% kvn_notify_unread_count %})</a>
+    <form method="post" action="{% url 'logout' %}" id="logout-form">{% csrf_token %}
+      <button type="submit" class="secondary">Log out</button>
+    </form>
+  </nav>
+  {% endif %}
+  {% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}
+  {% block content %}{% endblock %}
+
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("{% url 'service-worker' %}");
+  </script>
+  {% kvn_notify_scripts %}
+  <script>
+    // Remove this device before logging out, so the next person to log in on it
+    // does not receive this user's notifications.
+    const logout = document.getElementById("logout-form");
+    if (logout) {
+      logout.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try { await window.kvnNotify.unsubscribe(); } catch (error) { /* not subscribed */ }
+        logout.submit();
+      });
+    }
+  </script>
+</body>
+</html>

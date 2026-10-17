@@ -1,0 +1,20 @@
+{% extends "demo/base.html" %}
+{% load kvn_notify %}
+{% block content %}
+<h1>Hello, {{ user.username }}</h1>
+
+<h2>1. Turn notifications on for this browser</h2>
+<!-- --8<-- [start:button] -->
+{% kvn_notify_button %}
+<!-- --8<-- [end:button] -->
+<p class="note">Your browser asks for permission the first time.</p>
+
+<h2>2. Send yourself a notification</h2>
+<form method="post" action="{% url 'send-demo' %}">{% csrf_token %}
+  <button type="submit">Ship a pretend order</button>
+</form>
+<p class="note">
+  It arrives as a push on this device, an email (printed in the worker's terminal),
+  and an item in your <a href="{% url 'inbox' %}">inbox</a>.
+</p>
+{% endblock %}

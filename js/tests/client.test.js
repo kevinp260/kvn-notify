@@ -69,3 +69,22 @@ test("subscribe refuses cleanly where push is not supported", async () => {
 test("VAPID keys decode from URL-safe base64", () => {
   assert.deepEqual([...urlBase64ToUint8Array("AQID_w")], [1, 2, 3, 255]);
 });
+
+test("a page with no service worker fails clearly instead of waiting forever", async () => {
+  const saved = { window: globalThis.window, navigator: globalThis.navigator, Notification: globalThis.Notification };
+  globalThis.window = { PushManager: {}, Notification: {} };
+  Object.defineProperty(globalThis, "navigator", {
+    value: { serviceWorker: { ready: new Promise(() => {}) } },
+    configurable: true,
+  });
+  globalThis.Notification = { permission: "granted", requestPermission: async () => "granted" };
+  try {
+    const notify = createClient({ readyTimeout: 20 });
+    assert.equal(await notify.isSubscribed(), false);
+    await assert.rejects(notify.subscribe(), (error) => error.code === "no-service-worker");
+  } finally {
+    globalThis.window = saved.window;
+    Object.defineProperty(globalThis, "navigator", { value: saved.navigator, configurable: true });
+    globalThis.Notification = saved.Notification;
+  }
+});

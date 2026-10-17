@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: examples/django-api-react/backend/Dockerfile
+    command: sh -c "python manage.py migrate --noinput && python manage.py seed_demo && python manage.py runserver 0.0.0.0:8000"
+    volumes: ["data:/app/data"]
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: examples/django-api-react/backend/Dockerfile
+    # Sends the queued pushes and emails. Emails are printed here.
+    command: sh -c "sleep 3 && python manage.py notify_worker"
+    volumes: ["data:/app/data"]
+    depends_on: [backend]
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: examples/django-api-react/frontend/Dockerfile
+    command: npx vite --host 0.0.0.0 --port 5173
+    environment:
+      API_URL: http://backend:8000
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  data:

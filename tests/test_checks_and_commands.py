@@ -131,3 +131,22 @@ def test_importable_custom_functions_pass(config):
         AUTH="tests.test_views.find_user_from_header", PERMISSION="tests.test_views.find_user_from_header"
     ):
         assert check_settings() == []
+
+
+def test_make_badge_drops_a_faint_glow_around_the_logo(tmp_path):
+    from PIL import ImageDraw, ImageFilter
+
+    logo = Image.new("RGB", (200, 200), (255, 255, 255))
+    glow = Image.new("RGB", (200, 200), (255, 255, 255))
+    ImageDraw.Draw(glow).ellipse((20, 20, 180, 180), fill=(235, 235, 235))  # faint halo, difference 20
+    logo.paste(glow.filter(ImageFilter.GaussianBlur(4)))
+    ImageDraw.Draw(logo).ellipse((70, 70, 130, 130), fill=(20, 60, 200))
+    source = tmp_path / "glow.png"
+    logo.save(source)
+    call_command("notify_make_badge", str(source), stdout=io.StringIO())
+
+    with Image.open(tmp_path / "glow-badge-96.png") as badge:
+        alpha = badge.getchannel("A")
+        # The symbol fills the badge; the halo left no faint marks around it.
+        assert alpha.getpixel((48, 48)) == 255
+        assert sum(alpha.histogram()[1:255]) < 0.1 * 96 * 96

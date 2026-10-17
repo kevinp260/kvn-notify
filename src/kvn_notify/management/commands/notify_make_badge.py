@@ -47,9 +47,15 @@ class Command(BaseCommand):
             # Anything clearly below the threshold is background (including soft glows and
             # gradients); a short ramp just under it keeps the symbol's edges smooth.
             floor = threshold // 2
-            alpha = diff.point(
-                lambda v: 255 if v >= threshold else 0 if v <= floor else (v - floor) * 255 // (threshold - floor)
-            )
+
+            def to_alpha(v):
+                if v >= threshold:
+                    return 255
+                if v <= floor:
+                    return 0
+                return (v - floor) * 255 // (threshold - floor)
+
+            alpha = diff.point(to_alpha)
             self.stdout.write("No transparency found; separated the symbol from the background colour.")
 
         bbox = alpha.point(lambda a: 255 if a >= 32 else 0).getbbox()

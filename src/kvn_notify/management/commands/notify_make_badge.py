@@ -44,7 +44,12 @@ class Command(BaseCommand):
             corner = rgb.getpixel((0, 0))
             background = Image.new("RGB", rgb.size, corner)
             diff = ImageChops.difference(rgb, background).convert("L")
-            alpha = diff.point(lambda v: 255 if v >= threshold else int(v * 255 / max(threshold, 1)))
+            # Anything clearly below the threshold is background (including soft glows and
+            # gradients); a short ramp just under it keeps the symbol's edges smooth.
+            floor = threshold // 2
+            alpha = diff.point(
+                lambda v: 255 if v >= threshold else 0 if v <= floor else (v - floor) * 255 // (threshold - floor)
+            )
             self.stdout.write("No transparency found; separated the symbol from the background colour.")
 
         bbox = alpha.point(lambda a: 255 if a >= 32 else 0).getbbox()

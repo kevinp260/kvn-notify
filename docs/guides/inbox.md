@@ -13,11 +13,13 @@ gives you endpoints; the bell and the list page are yours, so they match your de
 2. Add `"inbox"` to the channels of each type that should appear in the list:
 
     ```python
-    register(NotificationType(
-        key="group.expense",
-        channels=["push", "inbox"],
-        title="{who} added {amount}",
-    ))
+    register(
+        NotificationType(
+            key="group.expense",
+            channels=["push", "inbox"],
+            title="{who} added {amount}",
+        )
+    )
     ```
 
 Types without `"inbox"` never appear in the list, so short-lived alerts can stay push-only.

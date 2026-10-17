@@ -43,8 +43,8 @@ All options are listed in [Declaring and sending](../guides/sending.md#declaring
 ```python
 from kvn_notify.api import get_preferences, set_preference
 
-set_preference(user, type_key, channel, enabled)   # returns the Preference
-get_preferences(user)                              # every type with its channels on or off
+set_preference(user, type_key, channel, enabled)  # returns the Preference
+get_preferences(user)  # every type with its channels on or off
 ```
 
 ## Channels

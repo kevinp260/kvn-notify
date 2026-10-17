@@ -21,7 +21,7 @@ When no badge is set at all, Chrome shows its default bell.
 
 ```python
 KVN_NOTIFY = {
-    "BADGE": "icons/badge-96.png",   # a static path...
+    "BADGE": "icons/badge-96.png",  # a static path...
     "ICON": "icons/icon-192.png",
     # ...or a URL, when the frontend serves the files: "/badge-96.png"
 }

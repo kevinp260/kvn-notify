@@ -18,10 +18,10 @@ and a button to its link.
 KVN_NOTIFY = {
     # ...
     "EMAIL": {
-        "FROM": "Shop <hello@shop.example>",   # default: DEFAULT_FROM_EMAIL
+        "FROM": "Shop <hello@shop.example>",  # default: DEFAULT_FROM_EMAIL
         "BRAND_NAME": "Shop",
         "LOGO_URL": "https://shop.example/static/logo-email.png",
-        "PRIMARY_COLOR": "#2F9E8A",            # the button
+        "PRIMARY_COLOR": "#2F9E8A",  # the button
         "FOOTER_TEXT": "You get this because you have an account at Shop.",
     },
 }
@@ -46,12 +46,14 @@ It has these blocks: `header`, `content`, `action`, `action_label` and `footer`.
 ## Level 3: a template per type
 
 ```python
-register(NotificationType(
-    key="leave.approved",
-    channels=["email"],
-    title="Your leave request was approved",
-    email_template="leaves/email/approved",
-))
+register(
+    NotificationType(
+        key="leave.approved",
+        channels=["email"],
+        title="Your leave request was approved",
+        email_template="leaves/email/approved",
+    )
+)
 ```
 
 kvn-notify then looks for:

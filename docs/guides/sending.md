@@ -12,13 +12,15 @@ these modules at startup.
 ```python
 from kvn_notify import NotificationType, register
 
-register(NotificationType(
-    key="leave.approved",
-    channels=["email", "push"],
-    title="Your leave request was approved",
-    body="{leave.leave_type.name}, {dates}",
-    url="/leaves/{leave.id}",
-))
+register(
+    NotificationType(
+        key="leave.approved",
+        channels=["email", "push"],
+        title="Your leave request was approved",
+        body="{leave.leave_type.name}, {dates}",
+        url="/leaves/{leave.id}",
+    )
+)
 ```
 
 | Option | Default | Meaning |
@@ -46,11 +48,13 @@ The recipient is always available as `{recipient}`.
 When a format string is not enough, pass a function that takes the context and returns text:
 
 ```python
-register(NotificationType(
-    key="group.expense",
-    channels=["push", "inbox"],
-    title=lambda ctx: f"{ctx['who']} added {ctx['amount']:.2f} {ctx['currency']}",
-))
+register(
+    NotificationType(
+        key="group.expense",
+        channels=["push", "inbox"],
+        title=lambda ctx: f"{ctx['who']} added {ctx['amount']:.2f} {ctx['currency']}",
+    )
+)
 ```
 
 A missing value raises an error naming the field and the value, so a typo shows up the first time
@@ -86,7 +90,7 @@ notify(
     recipients,
     "monitor.down",
     {"monitor": monitor, "cause": cause},
-    channels=["email"],          # override the type's channels for this call only
+    channels=["email"],  # override the type's channels for this call only
     dedupe_key=f"down-{incident.pk}",
     data={"monitor_id": monitor.pk},
 )

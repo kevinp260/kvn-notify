@@ -27,9 +27,9 @@ class SmsChannel(Channel):
         try:
             sms_provider.send(to=notification.user.phone_number, text=notification.title)
         except sms_provider.TemporaryError as exc:
-            return SendResult.retry(str(exc))      # tried again later, with growing waits
+            return SendResult.retry(str(exc))  # tried again later, with growing waits
         except sms_provider.InvalidNumber as exc:
-            return SendResult.failed(str(exc))     # given up, visible in the admin
+            return SendResult.failed(str(exc))  # given up, visible in the admin
         return SendResult.sent()
 ```
 
@@ -56,12 +56,14 @@ class YourAppConfig(AppConfig):
 Then use it like any built-in channel:
 
 ```python
-register(NotificationType(
-    key="login.code",
-    channels=["sms"],
-    required=True,
-    title="Your login code is {code}",
-))
+register(
+    NotificationType(
+        key="login.code",
+        channels=["sms"],
+        required=True,
+        title="Your login code is {code}",
+    )
+)
 ```
 
 `manage.py check` reports a type that names a channel nobody registered (E004).

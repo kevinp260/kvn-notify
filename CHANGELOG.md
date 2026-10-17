@@ -20,3 +20,11 @@ a breaking change bumps the first number.
   `notify_vapid_keys` commands.
 - `kvn-notify-web`: browser client and service worker handlers for any frontend, plus
   template tags for Django template projects.
+- Readable device names ("Chrome on Android") in `PushSubscription.device_name` and `label`,
+  with an optional `device_name` when subscribing.
+- CSRF works with `CSRF_COOKIE_HTTPONLY = True`: the client falls back to the page's token,
+  and accepts a `csrfToken` option.
+
+### Fixed
+
+- Django REST framework session logins no longer fail with a JSON body.

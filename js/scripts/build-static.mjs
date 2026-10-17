@@ -68,6 +68,7 @@ const client = createClient({
   baseUrl: config.baseUrl || "/notify",
   serviceWorker: config.serviceWorker || undefined,
   csrfCookieName: config.csrfCookieName || "csrftoken",
+  csrfToken: config.csrfToken || undefined,
 });
 window.kvnNotify = { createClient, isSupported, urlBase64ToUint8Array, KvnNotifyError, client };
 window.kvnNotify.subscribe = () => client.subscribe();

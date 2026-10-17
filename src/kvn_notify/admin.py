@@ -54,9 +54,9 @@ class DeliveryAdmin(admin.ModelAdmin):
 
 @admin.register(PushSubscription)
 class PushSubscriptionAdmin(admin.ModelAdmin):
-    list_display = ("user", "active", "user_agent", "last_success_at", "created_at")
+    list_display = ("device_name", "user", "active", "last_success_at", "created_at")
     list_filter = ("active",)
-    search_fields = ("user_agent", "disabled_reason")
+    search_fields = ("device_name", "user_agent", "disabled_reason")
     raw_id_fields = ("user",)
     readonly_fields = ("endpoint_hash", "created_at", "updated_at", "last_success_at", "disabled_at")
 

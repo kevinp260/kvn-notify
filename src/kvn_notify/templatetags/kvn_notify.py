@@ -7,6 +7,7 @@
 """
 
 from django import template
+from django.middleware.csrf import get_token
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.html import format_html
@@ -20,18 +21,23 @@ def _base_url() -> str:
     return reverse("kvn_notify:vapid-key").rsplit("vapid-key/", 1)[0].rstrip("/")
 
 
-@register.simple_tag
-def kvn_notify_scripts(service_worker: str = ""):
+@register.simple_tag(takes_context=True)
+def kvn_notify_scripts(context, service_worker: str = ""):
     """service_worker: leave empty when your app registers its own service worker
     (add importScripts for kvn_notify/sw.js to it); pass "default" to use the
     package's ready-made worker instead."""
     worker = reverse("kvn_notify:service-worker") if service_worker == "default" else service_worker
+    # Handed to the script so session logins work even with CSRF_COOKIE_HTTPONLY = True.
+    request = context.get("request")
+    csrf_token = get_token(request) if request is not None else ""
     return format_html(
-        '<script src="{}" data-base-url="{}" data-service-worker="{}" data-inbox="{}" defer></script>',
+        '<script src="{}" data-base-url="{}" data-service-worker="{}" data-inbox="{}" '
+        'data-csrf-token="{}" defer></script>',
         static("kvn_notify/kvn-notify.js"),
         _base_url(),
         worker,
         "true" if notify_settings.INBOX else "false",
+        csrf_token,
     )
 
 

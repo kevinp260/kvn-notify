@@ -43,6 +43,16 @@ function readCookie(name) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
 }
 
+// With CSRF_COOKIE_HTTPONLY = True the page cannot read the cookie, so also look for
+// the token Django put in the page: a <meta name="csrf-token"> or a form's hidden input.
+function readPageToken() {
+  if (typeof document === "undefined" || !document.querySelector) return "";
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta && meta.content) return meta.content;
+  const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+  return input && input.value ? input.value : "";
+}
+
 const NO_WORKER_MESSAGE =
   "No service worker controls this page. Register one whose scope covers the page " +
   "(see the kvn-notify docs), or pass `serviceWorker` to createClient().";
@@ -87,6 +97,8 @@ function sameKey(subscription, keyBytes) {
  * @param {() => (Record<string,string>|Promise<Record<string,string>>)} [options.getHeaders]
  *   Extra headers per request, e.g. async () => ({ Authorization: `Bearer ${token}` }).
  * @param {string} [options.csrfCookieName="csrftoken"] Django's CSRF cookie, sent as X-CSRFToken for sessions.
+ * @param {string | (() => string)} [options.csrfToken] The CSRF token itself, for when the cookie is HttpOnly
+ *   and the page has no token to read. Otherwise found automatically.
  * @param {string} [options.serviceWorker] URL of a service worker to register, if the app has none of its own.
  * @param {number} [options.readyTimeout=10000] Milliseconds to wait for a service worker before failing.
  */
@@ -96,6 +108,7 @@ function createClient(options = {}) {
     credentials = "same-origin",
     getHeaders,
     csrfCookieName = "csrftoken",
+    csrfToken,
     serviceWorker,
     readyTimeout = 10000,
   } = options;
@@ -107,7 +120,8 @@ function createClient(options = {}) {
     if (getHeaders) Object.assign(headers, await getHeaders());
     const hasAuthorization = Object.keys(headers).some((h) => h.toLowerCase() === "authorization");
     if (UNSAFE_METHODS.has(method) && !hasAuthorization) {
-      const token = readCookie(csrfCookieName);
+      const given = typeof csrfToken === "function" ? csrfToken() : csrfToken;
+      const token = given || readCookie(csrfCookieName) || readPageToken();
       if (token) headers["X-CSRFToken"] = token;
     }
     const response = await fetch(`${base}${path}`, {
@@ -288,6 +302,7 @@ const client = createClient({
   baseUrl: config.baseUrl || "/notify",
   serviceWorker: config.serviceWorker || undefined,
   csrfCookieName: config.csrfCookieName || "csrftoken",
+  csrfToken: config.csrfToken || undefined,
 });
 window.kvnNotify = { createClient, isSupported, urlBase64ToUint8Array, KvnNotifyError, client };
 window.kvnNotify.subscribe = () => client.subscribe();

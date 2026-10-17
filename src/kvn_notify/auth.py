@@ -79,8 +79,14 @@ def _drf_user(request):
     from rest_framework.request import Request
     from rest_framework.settings import api_settings
 
+    # SessionAuthentication's CSRF check reads request.POST, which makes DRF parse the
+    # body. Read the body first so Django keeps a copy for the view, and give DRF the
+    # project's parsers so a JSON body parses instead of failing.
+    request.body  # noqa: B018
     drf_request = Request(
-        request, authenticators=[cls() for cls in api_settings.DEFAULT_AUTHENTICATION_CLASSES]
+        request,
+        parsers=[cls() for cls in api_settings.DEFAULT_PARSER_CLASSES],
+        authenticators=[cls() for cls in api_settings.DEFAULT_AUTHENTICATION_CLASSES],
     )
     try:
         user = drf_request.user  # runs each authenticator; SessionAuthentication enforces CSRF
@@ -88,4 +94,6 @@ def _drf_user(request):
         raise AuthFailed(str(exc.detail), 401) from exc
     except exceptions.PermissionDenied as exc:
         raise AuthFailed(str(exc.detail), 403) from exc
+    except exceptions.APIException as exc:
+        raise AuthFailed(str(exc.detail), exc.status_code) from exc
     return user

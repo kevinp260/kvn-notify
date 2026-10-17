@@ -34,9 +34,13 @@ Send the browser's subscription as it is (`subscription.toJSON()`):
 ```json
 {
   "endpoint": "https://fcm.googleapis.com/fcm/send/...",
-  "keys": {"p256dh": "BNcR...", "auth": "tBHI..."}
+  "keys": {"p256dh": "BNcR...", "auth": "tBHI..."},
+  "device_name": "Kevin's phone"
 }
 ```
+
+`device_name` is optional. Without it the device is named from the browser, such as
+"Chrome on Android" or "Safari on iPhone".
 
 `201 {"id": 12, "created": true}` for a new device, `200` with `"created": false` for a known one.
 A known device is moved to the logged-in user. `400` when the endpoint is not `https`, points at a

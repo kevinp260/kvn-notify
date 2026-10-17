@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from django.test import Client, override_settings
@@ -223,7 +224,54 @@ def test_template_tags_render(rf, user, push):
     scripts, button, count = html.split("|")
     assert 'src="/static/kvn_notify/kvn-notify.js"' in scripts
     assert 'data-base-url="/notify"' in scripts and 'data-inbox="true"' in scripts
+    # The token travels in the page, so sessions work with CSRF_COOKIE_HTTPONLY = True.
+    assert re.search(r'data-csrf-token="[A-Za-z0-9]{32,}"', scripts)
     assert "data-kvn-notify-button" in button and "Turn on notifications" in button
     assert count == "1"
     default_worker = Template('{% load kvn_notify %}{% kvn_notify_scripts "default" %}').render(Context({}))
     assert 'data-service-worker="/notify/sw.js"' in default_worker
+
+
+SESSION_DRF = {"DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"]}
+
+
+@pytest.mark.parametrize("with_token", [True, False])
+def test_drf_session_login_with_a_json_body(user, config, with_token):
+    """DRF's SessionAuthentication reads request.POST for its CSRF check; a JSON body
+    must still parse, reach the view, and a missing token must give 403, not 500."""
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(user)
+    client.cookies["csrftoken"] = "c" * 32
+    headers = {"HTTP_X_CSRFTOKEN": "c" * 32} if with_token else {}
+    with override_settings(REST_FRAMEWORK=SESSION_DRF), config(AUTH="drf"):
+        from rest_framework.settings import api_settings
+
+        api_settings.reload()
+        try:
+            response = post(
+                client,
+                "/notify/preferences/",
+                {"type": "leave.approved", "channel": "email", "enabled": False},
+                **headers,
+            )
+        finally:
+            api_settings.reload()
+    if with_token:
+        assert response.status_code == 200
+        row = next(r for r in response.json()["results"] if r["type"] == "leave.approved")
+        assert row["channels"]["email"] is False
+    else:
+        assert response.status_code == 403
+
+
+def test_devices_get_a_readable_name(logged_in):
+    from tests.test_devices import ANDROID_CHROME
+
+    post(logged_in, "/notify/subscriptions/", SUBSCRIPTION, HTTP_USER_AGENT=ANDROID_CHROME, **csrf(logged_in))
+    assert PushSubscription.objects.get().device_name == "Chrome on Android"
+
+    named = {**SUBSCRIPTION, "device_name": "  Kevin's   phone "}
+    post(logged_in, "/notify/subscriptions/", named, HTTP_USER_AGENT=ANDROID_CHROME, **csrf(logged_in))
+    device = PushSubscription.objects.get()
+    assert device.device_name == "Kevin's phone"
+    assert device.label == "Kevin's phone"

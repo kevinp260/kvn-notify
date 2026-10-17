@@ -88,3 +88,17 @@ test("a page with no service worker fails clearly instead of waiting forever", a
     globalThis.Notification = saved.Notification;
   }
 });
+
+test("an HttpOnly CSRF cookie falls back to the token in the page", async () => {
+  globalThis.document = {
+    cookie: "sessionid=abc",
+    querySelector: (selector) => (selector.includes("csrfmiddlewaretoken") ? { value: "from-form" } : null),
+  };
+  await createClient().sendTest();
+  assert.equal(requests[0].headers["X-CSRFToken"], "from-form");
+});
+
+test("a csrfToken option is used first", async () => {
+  await createClient({ csrfToken: () => "given" }).sendTest();
+  assert.equal(requests[0].headers["X-CSRFToken"], "given");
+});

@@ -56,7 +56,10 @@ Tell the client how to authenticate once, when you create it.
     ```
 
     The client reads Django's `csrftoken` cookie and sends it as `X-CSRFToken` on every change.
-    If you renamed the cookie (`CSRF_COOKIE_NAME`), pass `csrfCookieName`. For an API on another
+    If you renamed the cookie (`CSRF_COOKIE_NAME`), pass `csrfCookieName`. With
+    `CSRF_COOKIE_HTTPONLY = True` the cookie cannot be read, so the client looks for a
+    `<meta name="csrf-token">` tag or a `csrfmiddlewaretoken` form field on the page
+    instead (`{% kvn_notify_scripts %}` passes the token for you), or pass `csrfToken`. For an API on another
     origin, add `credentials: "include"` and configure CORS and `CSRF_TRUSTED_ORIGINS`.
 
 === "Token (JWT and others)"

@@ -14,6 +14,8 @@ export interface ClientOptions {
   getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   /** Django's CSRF cookie name, sent as X-CSRFToken for session logins. Default "csrftoken". */
   csrfCookieName?: string;
+  /** The CSRF token, for when the cookie is HttpOnly and the page has no token to read. */
+  csrfToken?: string | (() => string);
   /** URL of a service worker to register, for apps without one of their own. */
   serviceWorker?: string;
   /** Milliseconds to wait for a service worker before failing with code "no-service-worker". Default 10000. */

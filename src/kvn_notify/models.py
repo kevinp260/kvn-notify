@@ -25,6 +25,8 @@ class PushSubscription(models.Model):
     p256dh = models.CharField(max_length=255)
     auth = models.CharField(max_length=255)
     user_agent = models.CharField(max_length=512, blank=True)
+    # Short readable name such as "Chrome on Android", for lists of devices.
+    device_name = models.CharField(max_length=120, blank=True)
     active = models.BooleanField(default=True)
     disabled_reason = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -38,11 +40,24 @@ class PushSubscription(models.Model):
 
     def __str__(self) -> str:
         state = "active" if self.active else "inactive"
-        return f"Device of {self.user} ({state})"
+        return f"{self.label} of {self.user} ({state})"
 
     def save(self, *args, **kwargs):
         self.endpoint_hash = endpoint_hash(self.endpoint)
+        if not self.device_name:
+            from kvn_notify.devices import describe_user_agent
+
+            self.device_name = describe_user_agent(self.user_agent)
         super().save(*args, **kwargs)
+
+    @property
+    def label(self) -> str:
+        """What to show people: the device name, e.g. "Chrome on Android"."""
+        if self.device_name:
+            return self.device_name
+        from kvn_notify.devices import describe_user_agent
+
+        return describe_user_agent(self.user_agent)
 
     def deactivate(self, reason: str) -> None:
         now = timezone.now()

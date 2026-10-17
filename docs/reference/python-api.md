@@ -81,7 +81,7 @@ Read them like any Django model, for example to build your own inbox page or rep
 | --- | --- |
 | `kvn_notify.models.Notification` | One message to one recipient: `type`, `user` or `email`, `title`, `body`, `url`, `data`, `in_inbox`, `read_at`, `created_at` |
 | `kvn_notify.models.Delivery` | One channel (and for push one device) of a notification: `channel`, `status`, `attempts`, `next_attempt_at`, `sent_at`, `last_error`, `is_fallback` |
-| `kvn_notify.models.PushSubscription` | One subscribed browser or installed app: `user`, `endpoint`, `active`, `user_agent`, `last_success_at` |
+| `kvn_notify.models.PushSubscription` | One subscribed browser or installed app: `user`, `endpoint`, `active`, `device_name`, `user_agent`, `last_success_at`. Show `label` in a device list: a short name such as "Chrome on Android" |
 | `kvn_notify.models.Preference` | A user's choice: `user`, `type`, `channel`, `enabled` |
 
 ## Exceptions

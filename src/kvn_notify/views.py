@@ -15,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 from kvn_notify.api import get_preferences, notify, set_preference
 from kvn_notify.auth import AuthFailed, get_user
 from kvn_notify.conf import notify_settings
+from kvn_notify.devices import describe_user_agent
 from kvn_notify.exceptions import KvnNotifyError
 from kvn_notify.models import Notification, PushSubscription, endpoint_hash
 from kvn_notify.security import UnsafeEndpoint, check_push_endpoint
@@ -110,6 +111,9 @@ def subscriptions(request):
         raise ValueError(f"Refused push endpoint: {exc}") from None
 
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:512]
+    given_name = data.get("device_name")
+    if not isinstance(given_name, str):
+        given_name = ""
     subscription = PushSubscription.objects.filter(endpoint_hash=endpoint_hash(raw_endpoint)).first()
     created = subscription is None
     if created:
@@ -120,6 +124,8 @@ def subscriptions(request):
     subscription.p256dh = p256dh
     subscription.auth = auth_secret
     subscription.user_agent = user_agent
+    # A name the page sends wins; otherwise one is made from the browser's user agent.
+    subscription.device_name = " ".join(given_name.split())[:120] or describe_user_agent(user_agent)
     subscription.active = True
     subscription.disabled_reason = ""
     subscription.disabled_at = None

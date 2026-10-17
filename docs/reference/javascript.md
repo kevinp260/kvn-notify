@@ -21,6 +21,7 @@ const notify = createClient({ baseUrl: "/notify" });
 | `getHeaders` | none | Function returning extra headers per request, e.g. `Authorization`. May be async. |
 | `credentials` | `"same-origin"` | `"include"` for a cookie session on another origin. |
 | `csrfCookieName` | `"csrftoken"` | Django's CSRF cookie, sent as `X-CSRFToken` when there is no `Authorization` header. |
+| `csrfToken` | none | The CSRF token itself, or a function returning it. Only needed when `CSRF_COOKIE_HTTPONLY = True` and the page has no `csrf-token` meta tag or `csrfmiddlewaretoken` input. |
 | `serviceWorker` | none | URL of a service worker to register, for apps without their own. |
 | `readyTimeout` | `10000` | Milliseconds to wait for a service worker before failing. |
 

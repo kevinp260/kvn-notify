@@ -2,15 +2,15 @@
 
 __version__ = "0.1.0"
 
-__all__ = ["NotificationType", "notify", "register", "__version__"]
+__all__ = ["NotificationType", "cancel", "notify", "register", "__version__"]
 
 
 def __getattr__(name):
     # Imported lazily so `import kvn_notify` works before Django's app registry is ready.
-    if name == "notify":
-        from kvn_notify.api import notify
+    if name in ("notify", "cancel"):
+        from kvn_notify import api
 
-        return notify
+        return getattr(api, name)
     if name in ("NotificationType", "register"):
         from kvn_notify import types
 

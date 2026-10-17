@@ -42,3 +42,13 @@ register(
         email_template="testapp/email/custom",
     )
 )
+
+register(
+    NotificationType(
+        key="alert.group",
+        channels=["push"],
+        required=True,
+        title="[DOWN] {name}",
+        tag="incident-{incident_id}",
+    )
+)

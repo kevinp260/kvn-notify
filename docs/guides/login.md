@@ -27,6 +27,22 @@ def get_user(request):
     return api_key.user if api_key else None
 ```
 
+### An extra check: 2FA, staff only
+
+To require more than a login, for example a verified second factor, point `PERMISSION` at a
+function that takes the request and the user:
+
+```python
+# myapp/notify_access.py
+def verified_only(request, user):
+    return user.is_verified()  # django-otp
+
+
+KVN_NOTIFY = {"PERMISSION": "myapp.notify_access.verified_only", ...}
+```
+
+A user who fails it gets `403` from every endpoint.
+
 ## In the browser
 
 Tell the client how to authenticate once, when you create it.

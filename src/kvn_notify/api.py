@@ -1,8 +1,9 @@
-"""The functions apps call: notify() and the preference helpers."""
+"""The functions apps call: notify(), cancel() and the preference helpers."""
 
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Iterable
 from typing import Any
 
@@ -28,6 +29,7 @@ def notify(
     channels: Iterable[str] | None = None,
     dedupe_key: str | None = None,
     data: dict[str, Any] | None = None,
+    fallback_recipients: Any = None,
 ) -> list[Notification]:
     """Send a registered notification type to one or more recipients.
 
@@ -36,6 +38,9 @@ def notify(
     channels: overrides the type's channels for this one call (rarely needed).
     dedupe_key: a repeat call with the same key for the same recipient does nothing.
     data: extra JSON-serialisable values stored on the notification and returned by the inbox API.
+    fallback_recipients: users or email addresses told, by the type's fallback channel
+        (email by default), only if no device of any recipient takes the push. For
+        alerts: "push to everyone's phones; if nobody got it, email the on-call inbox".
 
     Nothing is sent until the surrounding database transaction commits, so a
     change that rolls back never produces a message. Returns the notifications
@@ -46,25 +51,38 @@ def notify(
     for name in use_channels + ((ntype.fallback,) if ntype.fallback else ()):
         get_channel(name)  # fail fast on a typo, before anything is saved
 
+    group = None
+    if fallback_recipients is not None:
+        group = _prepare_group(ntype, dict(context or {}), fallback_recipients, dedupe_key, data)
+
     created: list[Notification] = []
     pending_ids: list[int] = []
+    skipped_as_repeat = False
     try:
         for recipient in _normalize_recipients(recipients):
             try:
                 with transaction.atomic():
                     result = _create_for_recipient(
-                        ntype, recipient, dict(context or {}), use_channels, dedupe_key, data
+                        ntype, recipient, dict(context or {}), use_channels, dedupe_key, data, group
                     )
             except IntegrityError:
                 # Another process created the same dedupe_key at the same moment.
                 if dedupe_key:
+                    skipped_as_repeat = True
                     continue
                 raise
             if result is None:
+                skipped_as_repeat = True
                 continue
             notification, ids = result
             created.append(notification)
             pending_ids.extend(ids)
+
+        if group and not skipped_as_repeat:
+            pushed = Delivery.objects.filter(notification__in=created, channel="push").exists()
+            if not pushed:
+                # Nobody has a device to push to: tell the fallback recipients now.
+                pending_ids.extend(create_group_fallback(group))
     finally:
         # Even if a later recipient raises, the ones already saved still get sent
         # (when the caller's transaction commits).
@@ -73,7 +91,9 @@ def notify(
     return created
 
 
-def _create_for_recipient(ntype: NotificationType, recipient, context, use_channels, dedupe_key, data):
+def _create_for_recipient(
+    ntype: NotificationType, recipient, context, use_channels, dedupe_key, data, group=None
+):
     user = recipient if not isinstance(recipient, str) else None
     email = recipient if isinstance(recipient, str) else ""
     recipient_key = f"user:{user.pk}" if user is not None else f"email:{email.lower()}"
@@ -96,6 +116,8 @@ def _create_for_recipient(ntype: NotificationType, recipient, context, use_chann
         tag=ntype.render("tag", fill)[:255] if ntype.tag else "",
         data=data or {},
         dedupe_key=dedupe_key,
+        group=group["id"] if group else None,
+        group_fallback=group or {},
     )
 
     disabled = _disabled_channels(user, ntype)
@@ -124,6 +146,108 @@ def _create_for_recipient(ntype: NotificationType, recipient, context, use_chann
 
     pending = [d.pk for d in deliveries if d.status == Delivery.Status.PENDING]
     return notification, pending
+
+
+def _prepare_group(ntype: NotificationType, context, fallback_recipients, dedupe_key, data) -> dict:
+    """Everything needed to tell the fallback recipients later, rendered now while the
+    context objects exist."""
+    channel = ntype.fallback or "email"
+    get_channel(channel)
+    keys = []
+    for recipient in _normalize_recipients(fallback_recipients):
+        keys.append(f"email:{recipient.lower()}" if isinstance(recipient, str) else f"user:{recipient.pk}")
+
+    fill = {**context, "recipient": None}
+    preview = Notification(
+        type=ntype.key,
+        title=ntype.render("title", fill)[:255],
+        body=ntype.render("body", fill),
+        url=ntype.render("url", fill)[:2048],
+        tag=ntype.render("tag", fill)[:255] if ntype.tag else "",
+    )
+    email = {"subject": "", "text": "", "html": "", "error": ""}
+    if channel == "email":
+        try:
+            email["subject"], email["text"], email["html"] = render_email(ntype, preview, fill)
+        except Exception as exc:
+            logger.exception("kvn-notify could not render the fallback email for type %s", ntype.key)
+            email["error"] = f"{type(exc).__name__}: {exc}"[:2000]
+
+    group_id = uuid.uuid4()
+    return {
+        "id": str(group_id),
+        "type": ntype.key,
+        "channel": channel,
+        "recipients": keys,
+        "title": preview.title,
+        "body": preview.body,
+        "url": preview.url,
+        "tag": preview.tag,
+        "data": data or {},
+        "email": email,
+        "dedupe_key": f"{dedupe_key}:fallback" if dedupe_key else f"kvn-group:{group_id}",
+    }
+
+
+def create_group_fallback(group: dict) -> list[int]:
+    """Create the fallback notifications of a group. Safe to call twice: the second
+    call finds them by their dedupe key and creates nothing."""
+    from django.contrib.auth import get_user_model
+
+    user_model = get_user_model()
+    channel = get_channel(group["channel"])
+    pending: list[int] = []
+    for key in group["recipients"]:
+        kind, _, value = key.partition(":")
+        user = user_model.objects.filter(pk=value).first() if kind == "user" else None
+        if kind == "user" and user is None:
+            continue
+        email = group["email"]
+        try:
+            with transaction.atomic():
+                if Notification.objects.filter(recipient_key=key, dedupe_key=group["dedupe_key"]).exists():
+                    continue
+                notification = Notification.objects.create(
+                    type=group["type"],
+                    user=user,
+                    email=value if kind == "email" else "",
+                    recipient_key=key,
+                    title=group["title"],
+                    body=group["body"],
+                    url=group["url"],
+                    tag=group["tag"],
+                    data=group["data"],
+                    email_subject=email["subject"],
+                    email_text=email["text"],
+                    email_html=email["html"],
+                    email_error=email["error"],
+                    dedupe_key=group["dedupe_key"],
+                    group=group["id"],
+                )
+                made = channel.create_deliveries(notification)
+                Delivery.objects.filter(pk__in=[d.pk for d in made]).update(is_fallback=True)
+        except IntegrityError:
+            continue  # another dispatcher created it at the same moment
+        pending.extend(d.pk for d in made if d.status == Delivery.Status.PENDING)
+    return pending
+
+
+def cancel(type_key: str, *, dedupe_key: str, recipients: Any = None) -> int:
+    """Stop notifications that have not been sent yet, e.g. an alert about something
+    already fixed. Matches the type and dedupe_key used with notify(), including any
+    fallback it queued. Deliveries already sent or being sent are left alone.
+    Returns how many deliveries were cancelled."""
+    keys = (dedupe_key, f"{dedupe_key}:fallback")
+    notifications = Notification.objects.filter(type=type_key, dedupe_key__in=keys)
+    if recipients is not None:
+        recipient_keys = [
+            f"email:{r.lower()}" if isinstance(r, str) else f"user:{r.pk}"
+            for r in _normalize_recipients(recipients)
+        ]
+        notifications = notifications.filter(recipient_key__in=recipient_keys)
+    return Delivery.objects.filter(notification__in=notifications, status=Delivery.Status.PENDING).update(
+        status=Delivery.Status.CANCELLED, claimed_at=None
+    )
 
 
 def _disabled_channels(user, ntype: NotificationType) -> set[str]:

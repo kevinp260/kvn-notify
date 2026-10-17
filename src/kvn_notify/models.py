@@ -84,6 +84,11 @@ class Notification(models.Model):
     read_at = models.DateTimeField(null=True, blank=True)
     # NULL (not "") so the unique constraint below only applies when a key is given.
     dedupe_key = models.CharField(max_length=255, null=True, blank=True)  # noqa: DJ001
+    # Notifications created by one notify() call that passed fallback_recipients share
+    # a group; group_fallback holds who to tell, and the rendered email, if no device
+    # in the group takes the push.
+    group = models.UUIDField(null=True, blank=True, db_index=True)
+    group_fallback = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
@@ -113,6 +118,7 @@ class Delivery(models.Model):
         SENDING = "sending", "Sending"
         SENT = "sent", "Sent"
         FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
 
     notification = models.ForeignKey(Notification, on_delete=models.CASCADE, related_name="deliveries")
     channel = models.CharField(max_length=30)

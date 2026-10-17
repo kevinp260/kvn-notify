@@ -7,6 +7,9 @@ KVN_NOTIFY["AUTH"]:
 - "drf": always use DRF's DEFAULT_AUTHENTICATION_CLASSES.
 - "path.to.function": your function(request) -> user or None. CSRF is then your
   function's responsibility.
+
+KVN_NOTIFY["PERMISSION"] (optional): a dotted path to a function(request, user) -> bool
+run after the user is found, e.g. to require a verified second factor or staff status.
 """
 
 from __future__ import annotations
@@ -43,6 +46,11 @@ def get_user(request):
         user = import_string(mode)(request)
     if user is None or not getattr(user, "is_authenticated", False):
         raise AuthFailed("Authentication credentials were not provided or are invalid.", 401)
+    permission = notify_settings.PERMISSION
+    if permission:
+        check = import_string(permission) if isinstance(permission, str) else permission
+        if not check(request, user):
+            raise AuthFailed("You do not have permission to manage notifications.", 403)
     return user
 
 

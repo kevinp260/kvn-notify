@@ -41,6 +41,7 @@ KVN_NOTIFY = {
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `AUTH` | `"auto"` | `"auto"`, `"session"`, `"drf"`, or a dotted path to your function. See [Logins](../guides/login.md). |
+| `PERMISSION` | `None` | Dotted path to a function `(request, user) -> bool`, run after login, e.g. to require 2FA. |
 | `INBOX` | `False` | Turn on the in-app list and its endpoints. |
 
 ## Email

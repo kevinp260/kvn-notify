@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from kvn_notify import signals
 from kvn_notify.channels import SendResult, get_channel
 from kvn_notify.conf import notify_settings
 from kvn_notify.types import find_type
@@ -30,6 +31,13 @@ class Stats:
         self.retried += other.retried
         self.failed += other.failed
         self.errors.extend(other.errors)
+
+
+def _push_handled():
+    from kvn_notify.models import Delivery
+
+    # A push still on its way, delivered, or deliberately cancelled: no fallback needed.
+    return (Delivery.Status.PENDING, Delivery.Status.SENDING, Delivery.Status.SENT, Delivery.Status.CANCELLED)
 
 
 def schedule(delivery_ids: list[int]) -> None:
@@ -134,6 +142,8 @@ def _process(delivery_ids: list[int]) -> Stats:
             stats.errors.append(result.error)
             if delivery.channel == "push" and not delivery.is_fallback:
                 _maybe_fall_back(delivery.notification_id)
+                if delivery.notification.group:
+                    _maybe_group_fallback(delivery.notification)
     return stats
 
 
@@ -148,6 +158,8 @@ def _record(delivery, result: SendResult) -> str:
         Delivery.objects.filter(pk=delivery.pk).update(
             status=Delivery.Status.SENT, sent_at=now, last_error="", **fields
         )
+        delivery.status, delivery.sent_at, delivery.attempts = Delivery.Status.SENT, now, attempts
+        _send_signal(signals.delivery_sent, delivery)
         return "sent"
 
     if result.status == "retry" and attempts < notify_settings.MAX_ATTEMPTS:
@@ -167,7 +179,22 @@ def _record(delivery, result: SendResult) -> str:
         status=Delivery.Status.FAILED, last_error=error[:2000], **fields
     )
     logger.warning("kvn-notify delivery %s (%s) failed: %s", delivery.pk, delivery.channel, error)
+    delivery.status, delivery.last_error, delivery.attempts = Delivery.Status.FAILED, error, attempts
+    _send_signal(signals.delivery_failed, delivery, error=error)
     return "failed"
+
+
+def _send_signal(signal, delivery, **kwargs) -> None:
+    from kvn_notify.models import Delivery
+
+    for receiver, response in signal.send_robust(sender=Delivery, delivery=delivery, **kwargs):
+        if isinstance(response, Exception):
+            logger.error(
+                "kvn-notify signal receiver %r failed for delivery %s",
+                receiver,
+                delivery.pk,
+                exc_info=(type(response), response, response.__traceback__),
+            )
 
 
 def _maybe_fall_back(notification_id) -> None:
@@ -181,8 +208,7 @@ def _maybe_fall_back(notification_id) -> None:
         ntype = find_type(notification.type)
         if not ntype or not ntype.fallback:
             return
-        open_or_sent = (Delivery.Status.PENDING, Delivery.Status.SENDING, Delivery.Status.SENT)
-        if notification.deliveries.filter(channel="push", status__in=open_or_sent).exists():
+        if notification.deliveries.filter(channel="push", status__in=_push_handled()).exists():
             return
         if notification.deliveries.filter(is_fallback=True).exists():
             return
@@ -192,11 +218,30 @@ def _maybe_fall_back(notification_id) -> None:
         ids = [d.pk for d in made]
         Delivery.objects.filter(pk__in=ids).update(is_fallback=True)
         pending = [d.pk for d in made if d.status == Delivery.Status.PENDING]
-    if pending:
-        if notify_settings.DISPATCH == "inline":
-            send_now(pending)
-        else:
-            schedule(pending)
+    _send_follow_ups(pending)
+
+
+def _maybe_group_fallback(notification) -> None:
+    """When no device of anyone in a notify() call took the push, tell its fallback
+    recipients (once)."""
+    from kvn_notify.api import create_group_fallback
+    from kvn_notify.models import Delivery
+
+    if not notification.group_fallback:
+        return
+    in_group = Delivery.objects.filter(notification__group=notification.group, channel="push")
+    if in_group.filter(status__in=_push_handled()).exists():
+        return
+    _send_follow_ups(create_group_fallback(notification.group_fallback))
+
+
+def _send_follow_ups(pending: list[int]) -> None:
+    if not pending:
+        return
+    if notify_settings.DISPATCH == "inline":
+        send_now(pending)
+    else:
+        schedule(pending)
 
 
 def cleanup() -> int:

@@ -102,6 +102,71 @@ notify(
   your frontend to use.
 - **`channels`**: rarely needed. Prefer changing the type.
 
+## Alerts: tell someone if no device got it
+
+For alerts that must reach a person, push to everyone's devices and name who to email if
+**no device at all** takes the push:
+
+```python
+notify(
+    on_call_users,
+    "monitor.down",
+    {"monitor": monitor, "cause": cause},
+    dedupe_key=f"incident-{incident.pk}-down",
+    fallback_recipients=["ops@example.com"],
+)
+```
+
+- If any device of any recipient accepts the push, nobody is emailed.
+- If nobody has a device, or every device fails, `ops@example.com` gets one email.
+- The email uses the type's `fallback` channel if set, otherwise email, and is rendered right
+  away, so it reads the same however late it is sent.
+
+This is different from a type's `fallback`, which works **per person**: "push to Ana, and if Ana
+has no device, email Ana". Use one or the other for a type, not both.
+
+## Cancelling what has not been sent
+
+When the reason for a notification goes away before it is sent, cancel it. A monitor that recovers
+seconds after going down should not still send "DOWN":
+
+```python
+from kvn_notify import cancel
+
+cancel("monitor.down", dedupe_key=f"incident-{incident.pk}-down")
+```
+
+`cancel()` matches the type and the `dedupe_key` you sent with, optionally only for some
+`recipients=`. It stops deliveries that are still waiting, including a queued fallback email, and
+returns how many it stopped. Anything already sent, or being sent at that moment, is left alone.
+
+## Reacting when something was sent
+
+Two signals let your app record what happened, for example "alert sent at" on an incident:
+
+```python
+from django.dispatch import receiver
+from kvn_notify.signals import delivery_failed, delivery_sent
+
+
+@receiver(delivery_sent)
+def record_alert_time(sender, delivery, **kwargs):
+    notification = delivery.notification
+    if notification.type == "monitor.down":
+        Incident.objects.filter(
+            pk=notification.data["incident_id"], down_alert_sent_at__isnull=True
+        ).update(down_alert_sent_at=delivery.sent_at)
+```
+
+| Signal | Sent when | Arguments |
+| --- | --- | --- |
+| `delivery_sent` | A push service or mail server accepted a delivery | `delivery` |
+| `delivery_failed` | A delivery failed for good, with no more retries | `delivery`, `error` |
+
+Pass what your receiver needs in `data=` when calling `notify()`; fallback notifications carry the
+same `data`. Receivers run in the dispatcher. An exception in one is logged and never undoes or
+repeats the delivery.
+
 ## User preferences
 
 Users can turn a type off per channel. kvn-notify stores and applies the choice; whether you

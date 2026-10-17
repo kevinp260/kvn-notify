@@ -7,7 +7,8 @@ Everything an app imports. The rest of the package is internal and may change be
 ```python
 from kvn_notify import notify
 
-notify(recipients, type_key, context=None, *, channels=None, dedupe_key=None, data=None)
+notify(recipients, type_key, context=None, *, channels=None, dedupe_key=None, data=None,
+       fallback_recipients=None)
 ```
 
 | Argument | Type | Meaning |
@@ -18,6 +19,7 @@ notify(recipients, type_key, context=None, *, channels=None, dedupe_key=None, da
 | `channels` | list of `str` | Use these channels instead of the type's, for this call only. |
 | `dedupe_key` | `str` | A repeat call with the same key for the same recipient does nothing. |
 | `data` | `dict` | Extra JSON values stored with the notification, returned by the inbox API. |
+| `fallback_recipients` | users or email addresses | Told only if no device of any recipient takes the push. See [Alerts](../guides/sending.md#alerts-tell-someone-if-no-device-got-it). |
 
 Returns the list of `Notification` objects created; recipients skipped by `dedupe_key` are not in
 it. Sending starts after the current transaction commits.
@@ -37,6 +39,22 @@ register(NotificationType(key="...", title="...", ...))
 All options are listed in [Declaring and sending](../guides/sending.md#declaring-a-type).
 `register()` returns the type. Registering the same key twice with different options raises
 `ImproperlyConfiguredType`.
+
+## `cancel()`
+
+```python
+from kvn_notify import cancel
+
+cancel(type_key, *, dedupe_key, recipients=None)  # returns the number of deliveries stopped
+```
+
+Stops deliveries of that type and `dedupe_key` that have not been sent yet, including a queued
+fallback. See [Cancelling](../guides/sending.md#cancelling-what-has-not-been-sent).
+
+## Signals
+
+`kvn_notify.signals.delivery_sent(delivery)` and `kvn_notify.signals.delivery_failed(delivery,
+error)`. See [Reacting when something was sent](../guides/sending.md#reacting-when-something-was-sent).
 
 ## Preferences
 

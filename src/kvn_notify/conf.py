@@ -29,6 +29,9 @@ DEFAULTS: dict[str, Any] = {
     # How the endpoints find the user: "auto", "session", "drf", or a dotted path
     # to a function taking the request and returning a user or None.
     "AUTH": "auto",
+    # Optional extra check after login: dotted path to a function(request, user) -> bool,
+    # e.g. to require a verified second factor.
+    "PERMISSION": None,
     # Optional in-app notification list.
     "INBOX": False,
     # Delivery behaviour.

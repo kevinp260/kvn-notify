@@ -117,3 +117,17 @@ def test_unsafe_endpoints(endpoint):
 
 def test_public_ip_endpoint_is_allowed():
     check_push_endpoint("https://8.8.8.8/push")
+
+
+def test_custom_functions_that_cannot_be_imported(config):
+    with config(AUTH="myapp.auth.missing", PERMISSION="myapp.access.missing"):
+        problems = check_settings()
+    assert ids(problems) == ["kvn_notify.E005", "kvn_notify.E005"]
+    assert "PERMISSION" in " ".join(p.msg for p in problems)
+
+
+def test_importable_custom_functions_pass(config):
+    with config(
+        AUTH="tests.test_views.find_user_from_header", PERMISSION="tests.test_views.find_user_from_header"
+    ):
+        assert check_settings() == []

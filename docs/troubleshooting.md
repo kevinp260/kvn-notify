@@ -90,6 +90,12 @@ your own domain also help.
 A notification type names a channel that does not exist. Check the spelling (`"push"`, `"email"`,
 `"inbox"`), or register your own channel; see [Adding a channel](guides/custom-channels.md).
 
+### E005: a custom function cannot be imported {#e005}
+
+`AUTH` or `PERMISSION` names a function by its dotted path, e.g. `"myapp.auth.get_user"`, and
+that path does not import. Check the spelling, and that the module is in an installed app or on the
+Python path.
+
 ### W001: Web Push is not configured {#w001}
 
 `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` or `VAPID_SUBJECT` is empty. Run

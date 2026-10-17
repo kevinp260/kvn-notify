@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 
 from django.core.checks import Error, Tags, Warning, register
+from django.utils.module_loading import import_string
 
 from kvn_notify.conf import VALID_DISPATCH, docs_link, notify_settings
 
@@ -55,6 +56,21 @@ def check_settings(app_configs=None, **kwargs):
                 "pip install 'kvn-notify[drf]', or set AUTH to 'session'.",
             )
         )
+
+    # Custom functions are imported on each request; a typo should show up at startup.
+    for setting, value in (("AUTH", auth), ("PERMISSION", notify_settings.PERMISSION)):
+        if not isinstance(value, str) or value in ("auto", "session", "drf"):
+            continue
+        try:
+            import_string(value)
+        except ImportError as exc:
+            problems.append(
+                _problem(
+                    "E005",
+                    f"KVN_NOTIFY['{setting}'] is {value!r}, which cannot be imported: {exc}",
+                    "Check the dotted path to your function.",
+                )
+            )
 
     known = set(channel_names())
     for ntype in types:

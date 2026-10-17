@@ -176,7 +176,8 @@ def _maybe_fall_back(notification_id) -> None:
     from kvn_notify.models import Delivery, Notification
 
     with transaction.atomic():
-        notification = Notification.objects.select_for_update().select_related("user").get(pk=notification_id)
+        # No select_related here: PostgreSQL cannot lock rows across the nullable user join.
+        notification = Notification.objects.select_for_update().get(pk=notification_id)
         ntype = find_type(notification.type)
         if not ntype or not ntype.fallback:
             return

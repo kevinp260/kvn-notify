@@ -272,3 +272,35 @@ def test_real_encryption_with_generated_keys(user, monkeypatch, config):
     assert headers["content-encoding"] == "aes128gcm"
     assert headers["authorization"].startswith("vapid t=")
     assert b"Shop" not in request["data"]  # the payload is encrypted
+
+
+@pytest.mark.skipif(
+    __import__("os").environ.get("KVN_TEST_DB") != "postgres", reason="row locks need PostgreSQL"
+)
+def test_two_dispatchers_never_take_the_same_delivery(user, device, push, config):
+    import threading
+
+    from django.db import connection
+
+    from kvn_notify.dispatch import _claim
+
+    with config(DISPATCH="worker"):
+        notify(user, "group.expense", {"who": "Ana", "amount": "1"})
+    locked, release = threading.Event(), threading.Event()
+
+    def hold_lock():
+        with transaction.atomic():
+            list(Delivery.objects.select_for_update().filter(channel="push"))
+            locked.set()
+            release.wait(5)
+        connection.close()
+
+    other = threading.Thread(target=hold_lock)
+    other.start()
+    try:
+        assert locked.wait(5)
+        assert _claim(Delivery.objects.all(), 10) == []  # skipped, not waited for
+    finally:
+        release.set()
+        other.join()
+    assert len(_claim(Delivery.objects.all(), 10)) == 1

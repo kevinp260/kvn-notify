@@ -71,6 +71,31 @@ jobs:
           git diff --exit-code -- ../src/kvn_notify/static/kvn_notify/ \
             || (echo "Run 'node js/scripts/build-static.mjs' and commit the result." && exit 1)
 
+  examples:
+    name: Example projects
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -e ".[icons,drf]" "djangorestframework-simplejwt>=5.3"
+      - name: Django with templates
+        working-directory: examples/django-templates
+        run: python manage.py test
+      - name: Django API backend
+        working-directory: examples/django-api-react/backend
+        run: python manage.py test
+      - name: React frontend builds
+        working-directory: examples/django-api-react/frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          test -f dist/sw.js
+
   lint-and-build:
     name: Lint and build
     runs-on: ubuntu-latest

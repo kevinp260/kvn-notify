@@ -1,0 +1,80 @@
+site_name: kvn-notify
+site_description: Push notifications and emails for Django. Declared once, sent with one line, never lost.
+site_url: https://kevinp260.github.io/kvn-notify/
+repo_url: https://github.com/kevinp260/kvn-notify
+repo_name: kevinp260/kvn-notify
+edit_uri: edit/main/docs/
+copyright: MIT licence · Kevin Piranjani
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: blue
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Quick start:
+      - quick-start/index.md
+      - Django with templates: quick-start/templates.md
+      - Django API + any frontend: quick-start/frontend.md
+  - Guides:
+      - Declaring and sending: guides/sending.md
+      - Logins, sessions and tokens: guides/login.md
+      - Emails and templates: guides/emails.md
+      - The in-app inbox: guides/inbox.md
+      - Running the dispatcher: guides/dispatch.md
+      - Icons and badges: guides/icons.md
+      - Deploying and moving an existing app: guides/deploying.md
+      - Adding a channel (SMS and others): guides/custom-channels.md
+  - Reference:
+      - Settings: reference/settings.md
+      - Python API: reference/python-api.md
+      - HTTP endpoints: reference/endpoints.md
+      - JavaScript (kvn-notify-web): reference/javascript.md
+      - Management commands: reference/commands.md
+      - Push message format: reference/payload.md
+  - Troubleshooting: troubleshooting.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: false
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      # Code shown in the docs is pulled from files that CI runs, so it cannot go stale.
+      base_path: ["."]
+      check_paths: true
+      dedent_subsections: true
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn

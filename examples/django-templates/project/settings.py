@@ -24,9 +24,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # --8<-- [start:installed_apps]
     "kvn_notify",
-    # --8<-- [end:installed_apps]
     "demo",
 ]
 

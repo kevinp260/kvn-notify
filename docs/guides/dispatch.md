@@ -19,6 +19,10 @@ python manage.py notify_worker
 It sends what is due, waits `WORKER_POLL_SECONDS` (5) when the queue is empty, deletes old records
 once an hour, and stops cleanly on Ctrl+C or `SIGTERM`.
 
+It also survives the database going away: if PostgreSQL restarts, or the worker starts before
+`migrate` has run, it logs the error, waits (5 seconds, doubling up to a minute) and tries again
+with a fresh connection. Nothing is lost while it waits; the notifications stay queued.
+
 === "Docker Compose"
 
     ```yaml

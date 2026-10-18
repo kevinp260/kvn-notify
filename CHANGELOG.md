@@ -28,3 +28,5 @@ a breaking change bumps the first number.
 ### Fixed
 
 - Django REST framework session logins no longer fail with a JSON body.
+- `notify_worker` keeps running when the database restarts or is not migrated yet: it waits,
+  reconnects and tries again instead of erroring on every round or exiting.

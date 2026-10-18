@@ -100,6 +100,40 @@ def test_worker_once_sends_what_is_due(user, config):
     assert "sent=1" in out.getvalue()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_worker_keeps_running_after_a_database_error(monkeypatch):
+    import signal
+
+    from django.db import OperationalError
+
+    from kvn_notify import dispatch
+    from kvn_notify.management.commands import notify_worker
+
+    calls, sleeps = [], []
+
+    def process_due(batch):
+        calls.append(batch)
+        if len(calls) == 1:
+            raise OperationalError("server closed the connection unexpectedly")
+        return dispatch.Stats()
+
+    def fake_sleep(self, seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            self._running = False
+
+    monkeypatch.setattr(dispatch, "process_due", process_due)
+    monkeypatch.setattr(dispatch, "cleanup", lambda: 0)
+    monkeypatch.setattr(notify_worker.Command, "_sleep", fake_sleep)
+    monkeypatch.setattr(signal, "signal", lambda *args: None)
+    err = io.StringIO()
+    call_command("notify_worker", stdout=io.StringIO(), stderr=err)
+
+    assert len(calls) == 2  # it tried again after the error
+    assert sleeps[0] == notify_worker.ERROR_BACKOFF_SECONDS
+    assert "Round failed (OperationalError" in err.getvalue()
+
+
 @pytest.mark.parametrize(
     "endpoint",
     [

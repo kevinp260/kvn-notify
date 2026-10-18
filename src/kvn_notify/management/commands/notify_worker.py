@@ -1,12 +1,19 @@
+import logging
 import signal
 import time
 
 from django.core.management.base import BaseCommand
+from django.db import close_old_connections, connections
 
 from kvn_notify import dispatch
 from kvn_notify.conf import notify_settings
 
 CLEANUP_EVERY_SECONDS = 3600
+# After a failed round (database restarting, network blip), wait this long, doubling up to the cap.
+ERROR_BACKOFF_SECONDS = 5
+ERROR_BACKOFF_MAX_SECONDS = 60
+
+logger = logging.getLogger("kvn_notify")
 
 
 class Command(BaseCommand):
@@ -46,15 +53,29 @@ class Command(BaseCommand):
             self.stdout.write(f"kvn-notify worker started (batch {batch}, poll {poll}s). Ctrl+C to stop.")
 
         last_cleanup = 0.0
+        backoff = ERROR_BACKOFF_SECONDS
         while self._running:
-            stats = dispatch.process_due(batch)
-            if stats.processed and verbose:
-                self._report(stats)
-            if time.monotonic() - last_cleanup > CLEANUP_EVERY_SECONDS:
-                removed = dispatch.cleanup()
-                last_cleanup = time.monotonic()
-                if removed and verbose:
-                    self.stdout.write(f"Removed {removed} old notifications.")
+            # A long-running process never gets Django's per-request connection
+            # handling, so drop connections that broke (database restart) or expired.
+            close_old_connections()
+            try:
+                stats = dispatch.process_due(batch)
+                if stats.processed and verbose:
+                    self._report(stats)
+                if time.monotonic() - last_cleanup > CLEANUP_EVERY_SECONDS:
+                    removed = dispatch.cleanup()
+                    last_cleanup = time.monotonic()
+                    if removed and verbose:
+                        self.stdout.write(f"Removed {removed} old notifications.")
+            except Exception as exc:
+                # Keep running: whatever was due stays queued and is sent on a later round.
+                logger.exception("kvn-notify worker round failed; retrying in %ss", backoff)
+                self.stderr.write(f"Round failed ({exc.__class__.__name__}: {exc}); retrying in {backoff}s.")
+                connections.close_all()
+                self._sleep(backoff)
+                backoff = min(backoff * 2, ERROR_BACKOFF_MAX_SECONDS)
+                continue
+            backoff = ERROR_BACKOFF_SECONDS
             if stats.processed < batch:
                 self._sleep(poll)
         if verbose:

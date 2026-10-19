@@ -129,6 +129,20 @@ def list_devices(user):
     return PushSubscription.objects.filter(user=user).order_by("-created_at")
 
 
+def device_summary(device) -> dict:
+    """One device as the endpoints return it. The push address and keys are left out;
+    `endpoint_hash` (SHA-256 of the address) lets a browser recognise its own row."""
+    when = lambda value: value.isoformat() if value else None  # noqa: E731
+    return {
+        "id": device.pk,
+        "name": device.label,
+        "active": device.active,
+        "endpoint_hash": device.endpoint_hash,
+        "created_at": when(device.created_at),
+        "last_success_at": when(device.last_success_at),
+    }
+
+
 def send_test(user) -> int:
     """Push "Notifications are working" to every active device of `user`.
     Returns how many devices it went to (0 means nothing was sent)."""

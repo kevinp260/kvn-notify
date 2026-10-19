@@ -245,3 +245,45 @@ test("the browser-only helpers work without kvn-notify's endpoints", async () =>
   });
   assert.equal(requests.length, 0); // no request to any kvn-notify endpoint
 });
+
+test("the device list marks this browser's own device", async () => {
+  const { createHash } = await import("node:crypto");
+  const hash = (text) => createHash("sha256").update(text).digest("hex");
+  let unsubscribed = 0;
+  const mine = { endpoint: "https://push.example.com/mine", options: {}, unsubscribe: async () => (unsubscribed += 1) };
+  const reg = { active: {}, pushManager: { getSubscription: async () => mine } };
+  responses.push({
+    status: 200,
+    body: {
+      results: [
+        { id: 2, name: "Chrome on Android", endpoint_hash: hash("https://push.example.com/phone") },
+        { id: 1, name: "Firefox on Linux", endpoint_hash: hash(mine.endpoint) },
+      ],
+    },
+  });
+
+  await inBrowser({ reg }, async () => {
+    const notify = createClient();
+    const { results } = await notify.devices.list();
+    assert.deepEqual(results.map((d) => [d.id, d.current]), [[2, false], [1, true]]);
+
+    // Another device: only the server row goes.
+    await notify.devices.remove(results[0]);
+    assert.equal(requests.at(-1).url, "/notify/subscriptions/2/");
+    assert.equal(requests.at(-1).method, "DELETE");
+    assert.equal(unsubscribed, 0);
+
+    // This browser: the server row and the browser's own subscription.
+    await notify.devices.remove(results[1]);
+    assert.equal(requests.at(-1).url, "/notify/subscriptions/1/");
+    assert.equal(unsubscribed, 1);
+  });
+});
+
+test("the device list works where push is unavailable, with nothing marked current", async () => {
+  responses.push({ status: 200, body: { results: [{ id: 3, endpoint_hash: "abc" }] } });
+  const { results } = await createClient().devices.list();
+  assert.equal(results[0].current, false);
+  await createClient().devices.remove(3);
+  assert.equal(requests.at(-1).url, "/notify/subscriptions/3/");
+});

@@ -38,6 +38,8 @@ const notify = createClient({ baseUrl: "/notify" });
 | `subscribe()` | `Promise<PushSubscription>` | Call it from a click. Asks permission, subscribes, saves the device. |
 | `unsubscribe()` | `Promise<boolean>` | Call it before logging out. |
 | `sendTest()` | `Promise<{devices}>` | |
+| `devices.list()` | `Promise<{results}>` | The user's devices, newest first: `id`, `name`, `active`, `created_at`, `last_success_at`, and `current: true` on this browser's own. |
+| `devices.remove(device)` | `Promise<null>` | Takes an entry from `list()` or an id. Removing this browser's own device also drops its subscription, as `unsubscribe()` does. |
 | `preferences.list()` | `Promise<{results}>` | |
 | `preferences.set(type, channel, enabled)` | `Promise<{results}>` | |
 | `inbox.list({unread, page, pageSize})` | `Promise<InboxPage>` | |
@@ -45,6 +47,19 @@ const notify = createClient({ baseUrl: "/notify" });
 | `inbox.markRead(id)` | `Promise<null>` | |
 | `inbox.markAllRead()` | `Promise<{marked}>` | |
 | `handleOpenedFromPush()` | `Promise<string \| null>` | Call on page load when using the inbox. |
+
+### A "your devices" page
+
+```javascript
+const { results } = await notify.devices.list();
+for (const device of results) {
+  const row = addRow(device.current ? `${device.name} (this device)` : device.name);
+  if (!device.active) row.note("No longer reachable");
+  row.onRemove(() => notify.devices.remove(device));
+}
+```
+
+The list never contains push addresses; `current` is worked out in the browser.
 
 ## Errors
 

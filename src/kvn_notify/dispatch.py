@@ -245,8 +245,9 @@ def _send_follow_ups(pending: list[int]) -> None:
 
 
 def cleanup() -> int:
-    """Delete old notifications. Returns how many were removed."""
-    from kvn_notify.models import Delivery, Notification
+    """Delete old notifications and long-dead devices. Returns how many notifications
+    were removed."""
+    from kvn_notify.models import Delivery, Notification, PushSubscription
 
     now = timezone.now()
     busy = (Delivery.Status.PENDING, Delivery.Status.SENDING)
@@ -262,4 +263,10 @@ def cleanup() -> int:
             in_inbox=in_inbox, created_at__lt=now - timedelta(days=days)
         ).exclude(deliveries__status__in=busy)
         removed += old.delete()[1].get("kvn_notify.Notification", 0)
+
+    days = notify_settings.INACTIVE_DEVICE_RETENTION_DAYS
+    if days:
+        PushSubscription.objects.filter(
+            active=False, disabled_at__lt=now - timedelta(days=days)
+        ).delete()
     return removed

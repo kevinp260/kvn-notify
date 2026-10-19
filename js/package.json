@@ -1,6 +1,6 @@
 {
   "name": "kvn-notify-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browser client and service worker handlers for kvn-notify (Django push notifications). Works with any frontend.",
   "license": "MIT",
   "author": "Kevin Piranjani",

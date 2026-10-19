@@ -8,6 +8,7 @@ urlpatterns = [
     path("vapid-key/", views.vapid_key, name="vapid-key"),
     path("sw.js", views.service_worker, name="service-worker"),
     path("subscriptions/", views.subscriptions, name="subscriptions"),
+    path("subscriptions/<int:device_id>/", views.subscription_detail, name="subscription-detail"),
     path("test/", views.send_test, name="test"),
     path("preferences/", views.preferences, name="preferences"),
     path("inbox/", views.inbox_list, name="inbox"),

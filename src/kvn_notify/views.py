@@ -15,7 +15,7 @@ from kvn_notify import inbox
 from kvn_notify.api import get_preferences, set_preference
 from kvn_notify.auth import AuthFailed, get_user
 from kvn_notify.conf import notify_settings
-from kvn_notify.devices import register_device, remove_device
+from kvn_notify.devices import device_summary, list_devices, register_device, remove_device
 from kvn_notify.devices import send_test as send_test_push
 from kvn_notify.exceptions import KvnNotifyError
 
@@ -83,8 +83,10 @@ def service_worker(request):
     return response
 
 
-@endpoint("POST", "DELETE")
+@endpoint("GET", "POST", "DELETE")
 def subscriptions(request):
+    if request.method == "GET":
+        return JsonResponse({"results": [device_summary(d) for d in list_devices(request.notify_user)]})
     data = _json_body(request)
     if request.method == "DELETE":
         endpoint_url = data.get("endpoint")
@@ -101,6 +103,17 @@ def subscriptions(request):
         device_name=given_name if isinstance(given_name, str) else "",
     )
     return JsonResponse({"id": device.pk, "created": created}, status=201 if created else 200)
+
+
+@endpoint("DELETE")
+def subscription_detail(request, device_id):
+    """Remove one of the user's devices by id, e.g. a lost phone from a device list."""
+    from kvn_notify.models import PushSubscription
+
+    deleted, _ = PushSubscription.objects.filter(pk=device_id, user=request.notify_user).delete()
+    if not deleted:
+        return _error("No such device.", 404)
+    return HttpResponse(status=204)
 
 
 @endpoint("POST")

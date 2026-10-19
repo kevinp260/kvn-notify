@@ -38,6 +38,12 @@ a breaking change bumps the first number.
 - `anotify()` and `acancel()` for async code; `export_user_data(user)` for data exports.
 - `kvn-notify-web`: `needsInstall()` for iPhones and iPads (the button tag shows the hint),
   `onUnauthorized` to refresh an expired token and retry, and `tokenHeaders`.
+- A device list for "your devices" pages: `GET subscriptions/` lists the user's devices and
+  `DELETE subscriptions/<id>/` removes one. In the browser, `client.devices.list()` marks this
+  browser's own device (`current`), and `client.devices.remove()` also drops this browser's
+  subscription when it removes its own. Push addresses are never returned, only a hash.
+- `INACTIVE_DEVICE_RETENTION_DAYS` (30 by default): devices the push service rejected for good
+  are deleted this long after, by the worker's hourly cleanup.
 
 ### Changed (for apps already on a pre-release commit)
 

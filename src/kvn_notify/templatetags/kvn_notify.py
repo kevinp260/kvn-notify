@@ -46,13 +46,15 @@ def kvn_notify_button(
     label_off="Turn on notifications",
     label_on="Turn off notifications",
     css_class="",
+    label_install="Add this site to your Home Screen to turn on notifications",
 ):
     return format_html(
         '<button type="button" class="{}" data-kvn-notify-button data-label-off="{}" '
-        'data-label-on="{}">{}</button>',
+        'data-label-on="{}" data-label-install="{}">{}</button>',
         css_class,
         label_off,
         label_on,
+        label_install,
         label_off,
     )
 

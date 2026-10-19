@@ -33,7 +33,10 @@ function bindButtons(client) {
     const subscribed = await client.isSubscribed().catch(() => false);
     buttons.forEach((button) => {
       const d = button.dataset;
-      if (permission === "unsupported") {
+      if (needsInstall()) {
+        button.disabled = true;
+        button.textContent = d.labelInstall || "Add this site to your Home Screen to turn on notifications";
+      } else if (permission === "unsupported") {
         button.disabled = true;
         button.textContent = d.labelUnsupported || "Notifications are not supported in this browser";
       } else if (permission === "denied") {
@@ -70,7 +73,16 @@ const client = createClient({
   csrfCookieName: config.csrfCookieName || "csrftoken",
   csrfToken: config.csrfToken || undefined,
 });
-window.kvnNotify = { createClient, isSupported, urlBase64ToUint8Array, KvnNotifyError, client };
+window.kvnNotify = {
+  createClient,
+  isSupported,
+  needsInstall,
+  createBrowserSubscription,
+  removeBrowserSubscription,
+  urlBase64ToUint8Array,
+  KvnNotifyError,
+  client,
+};
 window.kvnNotify.subscribe = () => client.subscribe();
 window.kvnNotify.unsubscribe = () => client.unsubscribe();
 window.kvnNotify.sendTest = () => client.sendTest();

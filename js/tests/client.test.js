@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
-import { createClient, KvnNotifyError, urlBase64ToUint8Array } from "../src/client.js";
+import {
+  createBrowserSubscription,
+  createClient,
+  KvnNotifyError,
+  needsInstall,
+  removeBrowserSubscription,
+  urlBase64ToUint8Array,
+} from "../src/client.js";
 
 let requests;
 let responses;
@@ -101,4 +108,140 @@ test("an HttpOnly CSRF cookie falls back to the token in the page", async () => 
 test("a csrfToken option is used first", async () => {
   await createClient({ csrfToken: () => "given" }).sendTest();
   assert.equal(requests[0].headers["X-CSRFToken"], "given");
+});
+
+// A fake browser for the tests below: window, navigator and Notification, put back afterwards.
+async function inBrowser({ userAgent = "Mozilla/5.0 (X11; Linux x86_64)", push = true, standalone = false, reg }, fn) {
+  const saved = { window: globalThis.window, navigator: globalThis.navigator, Notification: globalThis.Notification };
+  const calls = [];
+  globalThis.window = {
+    ...(push ? { PushManager: {}, Notification: {} } : {}),
+    matchMedia: () => ({ matches: standalone }),
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      userAgent,
+      platform: "",
+      maxTouchPoints: 0,
+      ...(push ? { serviceWorker: { ready: Promise.resolve(reg) } } : {}),
+    },
+    configurable: true,
+  });
+  globalThis.Notification = {
+    permission: "granted",
+    requestPermission: async () => {
+      calls.push("permission");
+      return "granted";
+    },
+  };
+  try {
+    return await fn(calls);
+  } finally {
+    globalThis.window = saved.window;
+    Object.defineProperty(globalThis, "navigator", { value: saved.navigator, configurable: true });
+    globalThis.Notification = saved.Notification;
+  }
+}
+
+function fakeRegistration(existing = null) {
+  const subscription = {
+    endpoint: "https://push.example.com/new",
+    options: {},
+    toJSON: () => ({ endpoint: "https://push.example.com/new", keys: { p256dh: "p", auth: "a" } }),
+    unsubscribe: async () => true,
+  };
+  return {
+    active: {},
+    pushManager: {
+      getSubscription: async () => existing,
+      subscribe: async () => subscription,
+    },
+  };
+}
+
+test("an expired token is refreshed once and the request retried", async () => {
+  let token = "old";
+  let refreshes = 0;
+  responses.push({ status: 401, body: {} }, { status: 202, body: { devices: 1 } });
+  const notify = createClient({
+    getHeaders: () => ({ Authorization: `Bearer ${token}` }),
+    onUnauthorized: async () => {
+      refreshes += 1;
+      token = "new";
+      return true;
+    },
+  });
+  assert.deepEqual(await notify.sendTest(), { devices: 1 });
+  assert.equal(refreshes, 1);
+  assert.deepEqual(
+    requests.map((r) => r.headers.Authorization),
+    ["Bearer old", "Bearer new"],
+  );
+});
+
+test("a refresh that fails, or a second 401, ends with the error", async () => {
+  responses.push({ status: 401, body: {} });
+  await assert.rejects(createClient({ onUnauthorized: () => false }).sendTest(), (e) => e.status === 401);
+  assert.equal(requests.length, 1);
+
+  requests = [];
+  responses.push({ status: 401, body: {} }, { status: 401, body: {} });
+  await assert.rejects(createClient({ onUnauthorized: () => true }).sendTest(), (e) => e.status === 401);
+  assert.equal(requests.length, 2);
+});
+
+test("allauth's X-Session-Token and listed token headers skip the CSRF token", async () => {
+  await createClient({ getHeaders: () => ({ "X-Session-Token": "s" }) }).sendTest();
+  await createClient({ getHeaders: () => ({ "X-Api-Key": "k" }), tokenHeaders: ["X-Api-Key"] }).sendTest();
+  await createClient({ getHeaders: () => ({ "X-Api-Key": "k" }) }).sendTest();
+  assert.equal(requests[0].headers["X-CSRFToken"], undefined);
+  assert.equal(requests[1].headers["X-CSRFToken"], undefined);
+  assert.equal(requests[2].headers["X-CSRFToken"], "tok123"); // not a known token header
+});
+
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile Safari/604.1";
+
+test("needsInstall is true only in an iPhone browser tab without push", async () => {
+  await inBrowser({ userAgent: IPHONE, push: false }, async () => {
+    assert.equal(needsInstall(), true);
+    await assert.rejects(createClient().subscribe(), (error) => error.code === "needs-install");
+  });
+  await inBrowser({ userAgent: IPHONE, push: true, standalone: true, reg: fakeRegistration() }, async () => {
+    assert.equal(needsInstall(), false); // installed: push works
+  });
+  await inBrowser({ push: false }, async () => {
+    assert.equal(needsInstall(), false); // a desktop browser without push just isn't supported
+  });
+});
+
+test("subscribe asks permission before fetching the key", async () => {
+  responses.push({ status: 200, body: { public_key: "AQID_w" } }, { status: 201, body: { id: 1 } });
+  await inBrowser({ reg: fakeRegistration() }, async (calls) => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      calls.push(url);
+      return realFetch(url, init);
+    };
+    try {
+      await createClient().subscribe();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(calls, ["permission", "/notify/vapid-key/", "/notify/subscriptions/"]);
+  });
+});
+
+test("the browser-only helpers work without kvn-notify's endpoints", async () => {
+  await inBrowser({ reg: fakeRegistration() }, async () => {
+    const json = await createBrowserSubscription({ vapidPublicKey: "AQID_w" });
+    assert.deepEqual(json, { endpoint: "https://push.example.com/new", keys: { p256dh: "p", auth: "a" } });
+  });
+  const existing = { endpoint: "https://push.example.com/old", unsubscribe: async () => true };
+  await inBrowser({ reg: fakeRegistration(existing) }, async () => {
+    assert.equal(await removeBrowserSubscription(), "https://push.example.com/old");
+  });
+  await inBrowser({ reg: fakeRegistration(null) }, async () => {
+    assert.equal(await removeBrowserSubscription(), null);
+  });
+  assert.equal(requests.length, 0); // no request to any kvn-notify endpoint
 });

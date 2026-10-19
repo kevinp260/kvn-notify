@@ -18,6 +18,9 @@ class KvnNotifyError extends Error {
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const OPENED_PARAM = "kvnNotificationId";
+// Same default as the server's KVN_NOTIFY["TOKEN_HEADERS"]: requests carrying one of
+// these log in with a token, so they need no CSRF token.
+const DEFAULT_TOKEN_HEADERS = ["Authorization", "X-Session-Token"];
 
 function isSupported() {
   return (
@@ -26,6 +29,27 @@ function isSupported() {
     "PushManager" in window &&
     "Notification" in window
   );
+}
+
+function isAppleMobile() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  // iPadOS reports itself as a Mac; touch support gives it away.
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isInstalledApp() {
+  if (typeof window === "undefined") return false;
+  const standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  return Boolean(standalone || navigator.standalone === true);
+}
+
+/**
+ * True on an iPhone or iPad where push is only available once the site is added to
+ * the Home Screen (iOS 16.4+). Show "Add to Home Screen" instead of the button then.
+ */
+function needsInstall() {
+  return isAppleMobile() && !isInstalledApp() && !isSupported();
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -80,6 +104,75 @@ function waitForActive(reg, ms) {
   return withTimeout(activated, ms, NO_WORKER_MESSAGE);
 }
 
+async function getRegistration({ serviceWorker, readyTimeout = 10000 } = {}) {
+  if (!isSupported()) {
+    const message = needsInstall()
+      ? "Add this site to the Home Screen first: iPhone and iPad only allow notifications for installed apps."
+      : "This browser does not support push notifications.";
+    throw new KvnNotifyError(message, { code: needsInstall() ? "needs-install" : "unsupported" });
+  }
+  if (serviceWorker) {
+    return waitForActive(await navigator.serviceWorker.register(serviceWorker), readyTimeout);
+  }
+  // `ready` never settles when no service worker covers this page, so give up
+  // with a clear message instead of leaving the button waiting forever.
+  return withTimeout(navigator.serviceWorker.ready, readyTimeout, NO_WORKER_MESSAGE);
+}
+
+// Permission is asked first, straight after the click: Safari only shows the prompt
+// while the click still counts as "recent", so the key is fetched afterwards.
+async function subscribeBrowser(reg, publicKey) {
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    throw new KvnNotifyError("Notification permission was not granted.", { code: "permission-denied" });
+  }
+  const key = typeof publicKey === "function" ? await publicKey() : publicKey;
+  const keyBytes = urlBase64ToUint8Array(key);
+  let subscription = await reg.pushManager.getSubscription();
+  if (subscription && !sameKey(subscription, keyBytes)) {
+    await subscription.unsubscribe();
+    subscription = null;
+  }
+  if (!subscription) {
+    subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
+  }
+  return subscription;
+}
+
+/**
+ * The browser half on its own, for apps with their own endpoints: ask permission
+ * (call it from a click), subscribe this browser and return the subscription JSON
+ * ({ endpoint, keys: { p256dh, auth } }) for your code to send to your server, which
+ * can pass it to kvn_notify.register_device().
+ *
+ * @param {{ vapidPublicKey: string, serviceWorker?: string, readyTimeout?: number }} options
+ */
+async function createBrowserSubscription({ vapidPublicKey, serviceWorker, readyTimeout } = {}) {
+  if (!vapidPublicKey) throw new KvnNotifyError("vapidPublicKey is required.", { code: "error" });
+  const reg = await getRegistration({ serviceWorker, readyTimeout });
+  return (await subscribeBrowser(reg, vapidPublicKey)).toJSON();
+}
+
+/**
+ * Unsubscribe this browser. Returns the endpoint it had (send it to your server so it
+ * can call kvn_notify.remove_device()), or null if it was not subscribed.
+ */
+async function removeBrowserSubscription({ serviceWorker, readyTimeout } = {}) {
+  if (!isSupported()) return null;
+  let reg;
+  try {
+    reg = await getRegistration({ serviceWorker, readyTimeout });
+  } catch (error) {
+    if (error instanceof KvnNotifyError && error.code === "no-service-worker") return null;
+    throw error;
+  }
+  const subscription = await reg.pushManager.getSubscription();
+  if (!subscription) return null;
+  const { endpoint } = subscription;
+  await subscription.unsubscribe();
+  return endpoint;
+}
+
 function sameKey(subscription, keyBytes) {
   const current = subscription.options && subscription.options.applicationServerKey;
   if (!current) return false;
@@ -101,6 +194,10 @@ function sameKey(subscription, keyBytes) {
  *   and the page has no token to read. Otherwise found automatically.
  * @param {string} [options.serviceWorker] URL of a service worker to register, if the app has none of its own.
  * @param {number} [options.readyTimeout=10000] Milliseconds to wait for a service worker before failing.
+ * @param {string[]} [options.tokenHeaders=["Authorization","X-Session-Token"]] Headers from getHeaders that
+ *   carry a login token; requests with one are sent without a CSRF token (match KVN_NOTIFY["TOKEN_HEADERS"]).
+ * @param {() => (boolean|Promise<boolean>)} [options.onUnauthorized] Called when a request gets 401, e.g. to
+ *   refresh an expired token. Return true and the request is retried once (getHeaders runs again).
  */
 function createClient(options = {}) {
   const {
@@ -111,15 +208,18 @@ function createClient(options = {}) {
     csrfToken,
     serviceWorker,
     readyTimeout = 10000,
+    tokenHeaders = DEFAULT_TOKEN_HEADERS,
+    onUnauthorized,
   } = options;
   const base = baseUrl.replace(/\/+$/, "");
+  const tokenHeaderNames = new Set(tokenHeaders.map((h) => h.toLowerCase()));
 
-  async function request(path, { method = "GET", body } = {}) {
+  async function request(path, { method = "GET", body } = {}, retried = false) {
     const headers = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (getHeaders) Object.assign(headers, await getHeaders());
-    const hasAuthorization = Object.keys(headers).some((h) => h.toLowerCase() === "authorization");
-    if (UNSAFE_METHODS.has(method) && !hasAuthorization) {
+    const hasToken = Object.entries(headers).some(([h, v]) => v && tokenHeaderNames.has(h.toLowerCase()));
+    if (UNSAFE_METHODS.has(method) && !hasToken) {
       const given = typeof csrfToken === "function" ? csrfToken() : csrfToken;
       const token = given || readCookie(csrfCookieName) || readPageToken();
       if (token) headers["X-CSRFToken"] = token;
@@ -130,6 +230,9 @@ function createClient(options = {}) {
       credentials,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (response.status === 401 && onUnauthorized && !retried && (await onUnauthorized())) {
+      return request(path, { method, body }, true);
+    }
     if (response.status === 204) return null;
     let data = null;
     try {
@@ -144,16 +247,8 @@ function createClient(options = {}) {
     return data;
   }
 
-  async function registration() {
-    if (!isSupported()) {
-      throw new KvnNotifyError("This browser does not support push notifications.", { code: "unsupported" });
-    }
-    if (serviceWorker) {
-      return waitForActive(await navigator.serviceWorker.register(serviceWorker), readyTimeout);
-    }
-    // `ready` never settles when no service worker covers this page, so give up
-    // with a clear message instead of leaving the button waiting forever.
-    return withTimeout(navigator.serviceWorker.ready, readyTimeout, NO_WORKER_MESSAGE);
+  function registration() {
+    return getRegistration({ serviceWorker, readyTimeout });
   }
 
   async function currentSubscription() {
@@ -170,6 +265,7 @@ function createClient(options = {}) {
 
   return {
     isSupported,
+    needsInstall,
 
     /** "granted", "denied", "default", or "unsupported". */
     permission() {
@@ -184,20 +280,7 @@ function createClient(options = {}) {
     /** Ask permission (call it from a click), subscribe this device and save it on the server. */
     async subscribe() {
       const reg = await registration();
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        throw new KvnNotifyError("Notification permission was not granted.", { code: "permission-denied" });
-      }
-      const { public_key: publicKey } = await request("/vapid-key/");
-      const keyBytes = urlBase64ToUint8Array(publicKey);
-      let subscription = await reg.pushManager.getSubscription();
-      if (subscription && !sameKey(subscription, keyBytes)) {
-        await subscription.unsubscribe();
-        subscription = null;
-      }
-      if (!subscription) {
-        subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
-      }
+      const subscription = await subscribeBrowser(reg, async () => (await request("/vapid-key/")).public_key);
       await request("/subscriptions/", { method: "POST", body: subscription.toJSON() });
       return subscription;
     },
@@ -267,7 +350,10 @@ function bindButtons(client) {
     const subscribed = await client.isSubscribed().catch(() => false);
     buttons.forEach((button) => {
       const d = button.dataset;
-      if (permission === "unsupported") {
+      if (needsInstall()) {
+        button.disabled = true;
+        button.textContent = d.labelInstall || "Add this site to your Home Screen to turn on notifications";
+      } else if (permission === "unsupported") {
         button.disabled = true;
         button.textContent = d.labelUnsupported || "Notifications are not supported in this browser";
       } else if (permission === "denied") {
@@ -304,7 +390,16 @@ const client = createClient({
   csrfCookieName: config.csrfCookieName || "csrftoken",
   csrfToken: config.csrfToken || undefined,
 });
-window.kvnNotify = { createClient, isSupported, urlBase64ToUint8Array, KvnNotifyError, client };
+window.kvnNotify = {
+  createClient,
+  isSupported,
+  needsInstall,
+  createBrowserSubscription,
+  removeBrowserSubscription,
+  urlBase64ToUint8Array,
+  KvnNotifyError,
+  client,
+};
 window.kvnNotify.subscribe = () => client.subscribe();
 window.kvnNotify.unsubscribe = () => client.unsubscribe();
 window.kvnNotify.sendTest = () => client.sendTest();

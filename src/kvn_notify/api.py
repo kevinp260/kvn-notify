@@ -1,4 +1,5 @@
-"""The functions apps call: notify(), cancel() and the preference helpers."""
+"""The functions apps call: notify(), cancel(), their async forms, the preference
+helpers and export_user_data()."""
 
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from django.db import IntegrityError, transaction
 from kvn_notify import dispatch
 from kvn_notify.channels import get_channel
 from kvn_notify.emails import render_email
+from kvn_notify.language import in_language_of
 from kvn_notify.models import Delivery, Notification, Preference
 from kvn_notify.types import NotificationType, get_type
 
@@ -104,33 +106,39 @@ def _create_for_recipient(
     ):
         return None
 
-    fill = {**context, "recipient": user}
-    notification = Notification(
-        type=ntype.key,
-        user=user,
-        email=email,
-        recipient_key=recipient_key,
-        title=ntype.render("title", fill)[:255],
-        body=ntype.render("body", fill),
-        url=ntype.render("url", fill)[:2048],
-        tag=ntype.render("tag", fill)[:255] if ntype.tag else "",
-        data=data or {},
-        dedupe_key=dedupe_key,
-        group=group["id"] if group else None,
-        group_fallback=group or {},
-    )
-
     disabled = _disabled_channels(user, ntype)
     active = [name for name in use_channels if name not in disabled]
     fallback = ntype.fallback if ntype.fallback and ntype.fallback not in disabled else None
 
-    if "email" in active or fallback == "email":
-        try:
-            subject, text, html = render_email(ntype, notification, fill)
-            notification.email_subject, notification.email_text, notification.email_html = subject, text, html
-        except Exception as exc:  # a broken template must not break the caller's request
-            logger.exception("kvn-notify could not render the email for type %s", ntype.key)
-            notification.email_error = f"{type(exc).__name__}: {exc}"[:2000]
+    fill = {**context, "recipient": user}
+    # Everything the recipient reads is rendered in their language (LANGUAGE_FOR_USER).
+    with in_language_of(user):
+        notification = Notification(
+            type=ntype.key,
+            user=user,
+            email=email,
+            recipient_key=recipient_key,
+            title=ntype.render("title", fill)[:255],
+            body=ntype.render("body", fill),
+            url=ntype.render("url", fill)[:2048],
+            tag=ntype.render("tag", fill)[:255] if ntype.tag else "",
+            data=data or {},
+            dedupe_key=dedupe_key,
+            group=group["id"] if group else None,
+            group_fallback=group or {},
+        )
+
+        if "email" in active or fallback == "email":
+            try:
+                subject, text, html = render_email(ntype, notification, fill)
+                notification.email_subject, notification.email_text, notification.email_html = (
+                    subject,
+                    text,
+                    html,
+                )
+            except Exception as exc:  # a broken template must not break the caller's request
+                logger.exception("kvn-notify could not render the email for type %s", ntype.key)
+                notification.email_error = f"{type(exc).__name__}: {exc}"[:2000]
 
     notification.save()
 
@@ -322,3 +330,73 @@ def get_preferences(user) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+# --- Async code -------------------------------------------------------------------
+
+
+async def anotify(*args, **kwargs) -> list[Notification]:
+    """notify() for async views and consumers: same arguments, same result."""
+    from asgiref.sync import sync_to_async
+
+    return await sync_to_async(notify)(*args, **kwargs)
+
+
+async def acancel(*args, **kwargs) -> int:
+    """cancel() for async code."""
+    from asgiref.sync import sync_to_async
+
+    return await sync_to_async(cancel)(*args, **kwargs)
+
+
+# --- Personal data ----------------------------------------------------------------
+
+
+def export_user_data(user) -> dict[str, Any]:
+    """Everything kvn-notify stores about `user`, as JSON-ready data, for an
+    "export my data" feature. Push keys and endpoint addresses are left out: they
+    are secrets that only work together with the server's keys.
+
+    Deleting the user deletes all of it (devices, notifications, deliveries and
+    preferences cascade), so there is no separate delete function.
+    """
+    from kvn_notify.models import PushSubscription
+
+    def when(value):
+        return value.isoformat() if value else None
+
+    devices = [
+        {
+            "name": device.label,
+            "user_agent": device.user_agent,
+            "active": device.active,
+            "disabled_reason": device.disabled_reason,
+            "created_at": when(device.created_at),
+            "last_success_at": when(device.last_success_at),
+        }
+        for device in PushSubscription.objects.filter(user=user).order_by("created_at")
+    ]
+    notifications = [
+        {
+            "type": item.type,
+            "title": item.title,
+            "body": item.body,
+            "url": item.url,
+            "data": item.data,
+            "in_inbox": item.in_inbox,
+            "read_at": when(item.read_at),
+            "created_at": when(item.created_at),
+            "deliveries": [
+                {"channel": d.channel, "status": d.status, "sent_at": when(d.sent_at)}
+                for d in item.deliveries.all()
+            ],
+        }
+        for item in Notification.objects.filter(user=user)
+        .prefetch_related("deliveries")
+        .order_by("created_at")
+    ]
+    preferences = [
+        {"type": p.type, "channel": p.channel, "enabled": p.enabled}
+        for p in Preference.objects.filter(user=user).order_by("type", "channel")
+    ]
+    return {"devices": devices, "notifications": notifications, "preferences": preferences}

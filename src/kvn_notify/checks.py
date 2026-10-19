@@ -58,7 +58,11 @@ def check_settings(app_configs=None, **kwargs):
         )
 
     # Custom functions are imported on each request; a typo should show up at startup.
-    for setting, value in (("AUTH", auth), ("PERMISSION", notify_settings.PERMISSION)):
+    for setting, value in (
+        ("AUTH", auth),
+        ("PERMISSION", notify_settings.PERMISSION),
+        ("LANGUAGE_FOR_USER", notify_settings.LANGUAGE_FOR_USER),
+    ):
         if not isinstance(value, str) or value in ("auto", "session", "drf"):
             continue
         try:

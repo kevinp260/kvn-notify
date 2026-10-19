@@ -84,6 +84,28 @@ def check_settings(app_configs=None, **kwargs):
                     )
                 )
 
+    if not notify_settings.ENFORCE_CSRF:
+        problems.append(
+            _problem(
+                "W010",
+                "KVN_NOTIFY['ENFORCE_CSRF'] is False: the endpoints accept changing requests "
+                "without a CSRF check when the login came from a cookie.",
+                "Remove the setting, or list your token header in KVN_NOTIFY['TOKEN_HEADERS'] "
+                "if that is why you turned it off.",
+            )
+        )
+
+    from django.conf import settings as django_settings
+
+    if not django_settings.DEBUG and not getattr(django_settings, "SESSION_COOKIE_HTTPONLY", True):
+        problems.append(
+            _problem(
+                "W011",
+                "SESSION_COOKIE_HTTPONLY is False, so any script on your pages can read the login cookie.",
+                "Set SESSION_COOKIE_HTTPONLY = True (Django's default).",
+            )
+        )
+
     if "push" in used or not types:
         missing = [
             k

@@ -39,6 +39,8 @@ dev = [
     "pytest-django>=4.8",
     "Pillow>=10",
     "djangorestframework>=3.15",
+    "djangorestframework-simplejwt>=5.3",
+    "dj-rest-auth>=6",
     "ruff>=0.6",
 ]
 

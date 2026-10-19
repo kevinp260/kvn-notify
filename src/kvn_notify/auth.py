@@ -3,10 +3,18 @@
 KVN_NOTIFY["AUTH"]:
 - "auto" (default): Django REST framework's authentication if DRF is installed
   (so SimpleJWT, TokenAuthentication, SessionAuthentication all work), else "session".
-- "session": Django's session cookie, with CSRF checks on unsafe methods.
+- "session": Django's session cookie.
 - "drf": always use DRF's DEFAULT_AUTHENTICATION_CLASSES.
-- "path.to.function": your function(request) -> user or None. CSRF is then your
-  function's responsibility.
+- "path.to.function": your function(request) -> user or None.
+
+One CSRF rule applies in every mode: a request that changes something (POST,
+DELETE, ...) and carries none of KVN_NOTIFY["TOKEN_HEADERS"] (default:
+Authorization) must pass Django's CSRF check. Without a token header the login
+can only have come from a cookie, which a browser attaches to forged requests
+too. Requests with a token header skip it, as nothing attaches those
+automatically. In "session" mode the check always runs. KVN_NOTIFY["ENFORCE_CSRF"] =
+False turns the rule off for the other modes (warning W010); logins that check CSRF
+themselves, such as DRF's SessionAuthentication, still do.
 
 KVN_NOTIFY["PERMISSION"] (optional): a dotted path to a function(request, user) -> bool
 run after the user is found, e.g. to require a verified second factor or staff status.
@@ -35,6 +43,9 @@ def _mode() -> str:
     return mode
 
 
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS", "TRACE")
+
+
 def get_user(request):
     """Return the authenticated user, or raise AuthFailed."""
     mode = _mode()
@@ -46,6 +57,9 @@ def get_user(request):
         user = import_string(mode)(request)
     if user is None or not getattr(user, "is_authenticated", False):
         raise AuthFailed("Authentication credentials were not provided or are invalid.", 401)
+    # A "session" login always came from the cookie, whatever headers are present.
+    if mode == "session" or (notify_settings.ENFORCE_CSRF and not has_token_header(request)):
+        _enforce_csrf(request)
     permission = notify_settings.PERMISSION
     if permission:
         check = import_string(permission) if isinstance(permission, str) else permission
@@ -54,16 +68,20 @@ def get_user(request):
     return user
 
 
+def has_token_header(request) -> bool:
+    """True when the request carries a login that a browser never attaches by itself."""
+    return any(request.headers.get(name) for name in notify_settings.TOKEN_HEADERS)
+
+
 def _session_user(request):
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
         return None
-    _enforce_csrf(request)
     return user
 
 
 def _enforce_csrf(request) -> None:
-    if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+    if request.method in SAFE_METHODS or getattr(request, "_kvn_notify_csrf_checked", False):
         return
     check = CsrfViewMiddleware(lambda req: None)
     check.process_request(request)
@@ -72,6 +90,7 @@ def _enforce_csrf(request) -> None:
         raise AuthFailed(
             "CSRF check failed. Send the X-CSRFToken header with the csrftoken cookie value.", 403
         )
+    request._kvn_notify_csrf_checked = True
 
 
 def _drf_user(request):

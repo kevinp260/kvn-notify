@@ -1,6 +1,6 @@
 import os
 
-SECRET_KEY = "kvn-notify-tests"
+SECRET_KEY = "kvn-notify-tests-only-not-a-real-secret-key"
 DEBUG = False
 USE_TZ = True
 ROOT_URLCONF = "tests.urls"
@@ -13,6 +13,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.admin",
     "django.contrib.messages",
+    "rest_framework",
+    "rest_framework.authtoken",
     "kvn_notify",
     "tests.testapp",
 ]
@@ -70,3 +72,7 @@ KVN_NOTIFY = {
     "VALIDATE_PUSH_ENDPOINTS": False,
     "INBOX": True,
 }
+
+# dj-rest-auth's JWT-in-a-cookie login, used by tests/test_login_setups.py. Its own CSRF
+# check (JWT_AUTH_COOKIE_USE_CSRF) is left at the default, off, on purpose.
+REST_AUTH = {"USE_JWT": True, "JWT_AUTH_COOKIE": "app-auth"}

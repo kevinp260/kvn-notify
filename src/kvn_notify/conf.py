@@ -32,6 +32,12 @@ DEFAULTS: dict[str, Any] = {
     # Optional extra check after login: dotted path to a function(request, user) -> bool,
     # e.g. to require a verified second factor.
     "PERMISSION": None,
+    # Headers that carry a login token. Requests with one skip the CSRF check (nothing
+    # sends them automatically); every other changing request must pass it.
+    # X-Session-Token is django-allauth's header for apps (headless "app" mode).
+    "TOKEN_HEADERS": ("Authorization", "X-Session-Token"),
+    # Turning this off removes CSRF protection from the endpoints (warning W010).
+    "ENFORCE_CSRF": True,
     # Optional in-app notification list.
     "INBOX": False,
     # Delivery behaviour.

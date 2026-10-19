@@ -10,8 +10,10 @@ Errors are JSON: `{"error": "message"}` with status `400`, `401`, `403`, `404`, 
 | --- | --- | --- |
 | GET | `vapid-key/` | The public key browsers need to subscribe |
 | GET | `sw.js` | A ready-made service worker, for apps without one |
+| GET | `subscriptions/` | The user's devices |
 | POST | `subscriptions/` | Save this device |
 | DELETE | `subscriptions/` | Remove this device |
+| DELETE | `subscriptions/<id>/` | Remove one of the user's devices |
 | POST | `test/` | Send a test push to the user's devices |
 | GET, POST | `preferences/` | Read or change the user's preferences |
 | GET | `inbox/` | The user's inbox (when `INBOX` is on) |
@@ -26,6 +28,23 @@ Errors are JSON: `{"error": "message"}` with status `400`, `401`, `403`, `404`, 
 ```
 
 `503` when `VAPID_PUBLIC_KEY` is not set.
+
+## `GET subscriptions/`
+
+The logged-in user's devices, newest first, for a "your devices" page:
+
+```json
+{"results": [
+  {"id": 12, "name": "Chrome on Android", "active": true,
+   "endpoint_hash": "9f86d08...", "created_at": "2026-10-19T08:12:01+00:00",
+   "last_success_at": "2026-10-19T16:40:12+00:00"}
+]}
+```
+
+Push addresses and keys are never returned. `endpoint_hash` is the SHA-256 of the address (hex),
+so a browser can recognise its own device by hashing its subscription's `endpoint`; the
+JavaScript client does this and sets `current`. `active` is `false` once the push service has
+rejected the device for good; such devices are deleted after `INACTIVE_DEVICE_RETENTION_DAYS`.
 
 ## `POST subscriptions/`
 
@@ -53,6 +72,12 @@ private network, or a key is missing.
 ```
 
 `204`. Only the logged-in user's own device is removed.
+
+## `DELETE subscriptions/<id>/`
+
+Removes one of the user's devices by its `id` from the list, e.g. a lost phone. `204`, or `404`
+for a device that is not the user's. To remove the browser you are in, use `DELETE subscriptions/`
+(or `client.unsubscribe()`), which also lets the browser drop its own subscription.
 
 ## `POST test/`
 

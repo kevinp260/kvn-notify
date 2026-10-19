@@ -66,6 +66,33 @@ def test_subscribe_update_and_unsubscribe(logged_in, user):
     assert not PushSubscription.objects.exists()
 
 
+def test_list_and_remove_devices(logged_in, user, other_user):
+    import hashlib
+
+    post(logged_in, "/notify/subscriptions/", SUBSCRIPTION, **csrf(logged_in),
+         HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 14) Chrome/141.0 Mobile Safari/537.36")
+    theirs = PushSubscription.objects.create(
+        user=other_user, endpoint="https://push.example.com/theirs", p256dh="k", auth="a"
+    )
+
+    listed = logged_in.get("/notify/subscriptions/").json()["results"]
+    assert len(listed) == 1
+    [mine] = listed
+    assert mine["name"] == "Chrome on Android" and mine["active"] is True
+    # A browser recognises its own row without the server handing out addresses.
+    assert mine["endpoint_hash"] == hashlib.sha256(SUBSCRIPTION["endpoint"].encode()).hexdigest()
+    assert "endpoint" not in mine and "p256dh" not in mine and "auth" not in mine
+
+    # Someone else's device: not found, and not removed.
+    assert logged_in.delete(f"/notify/subscriptions/{theirs.pk}/", **csrf(logged_in)).status_code == 404
+    assert PushSubscription.objects.filter(pk=theirs.pk).exists()
+    # Removing changes data, so the CSRF rule applies.
+    assert logged_in.delete(f"/notify/subscriptions/{mine['id']}/").status_code == 403
+
+    assert logged_in.delete(f"/notify/subscriptions/{mine['id']}/", **csrf(logged_in)).status_code == 204
+    assert not PushSubscription.objects.filter(user=user).exists()
+
+
 def test_a_device_moves_to_whoever_logs_in(logged_in, user, other_user):
     post(logged_in, "/notify/subscriptions/", SUBSCRIPTION, **csrf(logged_in))
     bob = Client(enforce_csrf_checks=True)
@@ -148,7 +175,8 @@ def test_inbox_endpoints_are_off_when_inbox_is_disabled(logged_in, config):
 
 
 def test_wrong_method(logged_in):
-    assert logged_in.get("/notify/subscriptions/").status_code == 405
+    assert logged_in.get("/notify/test/").status_code == 405
+    assert logged_in.get("/notify/subscriptions/1/").status_code == 405
 
 
 def test_service_worker_is_served(client):

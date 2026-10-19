@@ -53,6 +53,20 @@ export interface InboxPage {
   unread_count: number;
 }
 
+export interface Device {
+  id: number;
+  /** e.g. "Chrome on Android", or the name given when subscribing. */
+  name: string;
+  /** False once the push service has rejected it for good. */
+  active: boolean;
+  /** SHA-256 of the push address; the address itself is never returned. */
+  endpoint_hash: string;
+  created_at: string;
+  last_success_at: string | null;
+  /** True for the device this browser is subscribed with. */
+  current: boolean;
+}
+
 export interface PreferenceRow {
   type: string;
   description: string;
@@ -69,6 +83,11 @@ export interface KvnNotifyClient {
   subscribe(): Promise<PushSubscription>;
   unsubscribe(): Promise<boolean>;
   sendTest(): Promise<{ devices: number }>;
+  devices: {
+    list(): Promise<{ results: Device[] }>;
+    /** Removing this browser's own device also drops its subscription. */
+    remove(device: Device | number): Promise<null>;
+  };
   preferences: {
     list(): Promise<{ results: PreferenceRow[] }>;
     set(type: string, channel: string, enabled: boolean): Promise<{ results: PreferenceRow[] }>;

@@ -223,6 +223,35 @@ def test_cleanup_removes_old_finished_notifications(user, push):
     assert not Notification.objects.filter(pk__in=[old.pk, inbox_item.pk]).exists()
 
 
+def test_cleanup_deletes_rejected_devices_after_their_retention(user, config):
+    from kvn_notify.models import PushSubscription
+
+    def make(name, active=True, disabled_days_ago=None):
+        device = PushSubscription.objects.create(
+            user=user, endpoint=f"https://push.example.com/{name}", p256dh="k", auth="a", active=active
+        )
+        if disabled_days_ago is not None:
+            PushSubscription.objects.filter(pk=device.pk).update(
+                disabled_at=timezone.now() - timedelta(days=disabled_days_ago)
+            )
+        return device
+
+    working = make("working")
+    recently_rejected = make("recent", active=False, disabled_days_ago=3)
+    long_rejected = make("old", active=False, disabled_days_ago=31)
+
+    cleanup()
+    assert set(PushSubscription.objects.values_list("pk", flat=True)) == {working.pk, recently_rejected.pk}
+
+    with config(INACTIVE_DEVICE_RETENTION_DAYS=0):  # 0 keeps them
+        PushSubscription.objects.filter(pk=recently_rejected.pk).update(
+            disabled_at=timezone.now() - timedelta(days=400)
+        )
+        cleanup()
+    assert PushSubscription.objects.filter(pk=recently_rejected.pk).exists()
+    assert not PushSubscription.objects.filter(pk=long_rejected.pk).exists()
+
+
 def test_real_encryption_with_generated_keys(user, monkeypatch, config):
     """Runs pywebpush for real (keys, encryption, VAPID header); only the HTTP call is faked."""
     import base64

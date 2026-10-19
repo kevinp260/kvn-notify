@@ -58,6 +58,9 @@ DEFAULTS: dict[str, Any] = {
     # Housekeeping, in days.
     "DELIVERY_RETENTION_DAYS": 90,
     "INBOX_RETENTION_DAYS": 90,
+    # Devices the push service rejected for good (404/410) are switched off at once
+    # and deleted this many days later. 0 keeps them.
+    "INACTIVE_DEVICE_RETENTION_DAYS": 30,
     # Email look and sender. See the "Emails and templates" guide.
     "EMAIL": {
         "FROM": None,  # defaults to DEFAULT_FROM_EMAIL

@@ -170,6 +170,13 @@ export async function removeBrowserSubscription({ serviceWorker, readyTimeout } 
   return endpoint;
 }
 
+// SHA-256 of a push address, as hex: how the server's device list names this browser
+// without ever sending the address back.
+async function sha256Hex(text) {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function sameKey(subscription, keyBytes) {
   const current = subscription.options && subscription.options.applicationServerKey;
   if (!current) return false;
@@ -249,7 +256,8 @@ export function createClient(options = {}) {
   }
 
   async function currentSubscription() {
-    if (!isSupported()) return null;
+    // Never allowed means never subscribed: answer at once rather than wait for a worker.
+    if (!isSupported() || Notification.permission !== "granted") return null;
     let reg;
     try {
       reg = await registration();
@@ -292,6 +300,33 @@ export function createClient(options = {}) {
         await subscription.unsubscribe();
       }
       return true;
+    },
+
+    devices: {
+      /**
+       * The user's devices, newest first, for a "your devices" list. The one this
+       * browser is subscribed with has `current: true`.
+       */
+      async list() {
+        const data = await request("/subscriptions/");
+        const subscription = await currentSubscription();
+        const here = subscription && globalThis.crypto?.subtle ? await sha256Hex(subscription.endpoint) : null;
+        return { results: data.results.map((device) => ({ ...device, current: device.endpoint_hash === here })) };
+      },
+
+      /**
+       * Remove a device (an entry from list(), or its id). Removing this browser's
+       * own device also drops its subscription, as unsubscribe() does.
+       */
+      async remove(device) {
+        const id = typeof device === "object" && device !== null ? device.id : device;
+        await request(`/subscriptions/${encodeURIComponent(id)}/`, { method: "DELETE" });
+        if (typeof device === "object" && device !== null && device.current) {
+          const subscription = await currentSubscription();
+          if (subscription) await subscription.unsubscribe();
+        }
+        return null;
+      },
     },
 
     /** Send a test notification to this user's devices. */

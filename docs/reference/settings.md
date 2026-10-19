@@ -67,3 +67,4 @@ Emails go through Django's own email settings (`EMAIL_BACKEND`, `EMAIL_HOST`, ..
 | --- | --- | --- |
 | `DELIVERY_RETENTION_DAYS` | `90` | Delete finished notifications older than this. `0` keeps them. |
 | `INBOX_RETENTION_DAYS` | `90` | The same for inbox items. |
+| `INACTIVE_DEVICE_RETENTION_DAYS` | `30` | Delete devices this long after the push service rejected them for good (they stop receiving at once). `0` keeps them. |

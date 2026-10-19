@@ -2,6 +2,9 @@
 
 Everything an app imports. The rest of the package is internal and may change between versions.
 
+The functions below can all be imported from `kvn_notify` directly, except the inbox functions
+(`from kvn_notify import inbox`) and the channel classes.
+
 ## `notify()`
 
 ```python
@@ -27,6 +30,16 @@ it. Sending starts after the current transaction commits.
 Raises `UnknownNotificationType` for an unregistered key, `ImproperlyConfiguredType` when the
 context lacks a value the text needs, `ValueError` for an invalid email address and `TypeError`
 for a recipient that is neither a user nor a string.
+
+### In async code
+
+```python
+from kvn_notify import anotify, acancel
+
+await anotify(user, "order.shipped", {"order": order})
+```
+
+Same arguments and results as `notify()` and `cancel()`, for async views and Channels consumers.
 
 ## `NotificationType` and `register()`
 
@@ -59,11 +72,53 @@ error)`. See [Reacting when something was sent](../guides/sending.md#reacting-wh
 ## Preferences
 
 ```python
-from kvn_notify.api import get_preferences, set_preference
+from kvn_notify import get_preferences, set_preference
 
 set_preference(user, type_key, channel, enabled)  # returns the Preference
 get_preferences(user)  # every type with its channels on or off
 ```
+
+## Devices
+
+The functions kvn-notify's own endpoints use, for apps with their own endpoints, admin actions or
+commands. See [Using your own endpoints](../guides/own-endpoints.md).
+
+```python
+from kvn_notify import list_devices, register_device, remove_device, remove_devices, send_test
+
+device, created = register_device(user, subscription_json, user_agent="", device_name="")
+remove_device(user, endpoint)   # True if it was theirs and is gone
+remove_devices(user)            # all of them, e.g. "log out everywhere"; returns how many
+list_devices(user)              # queryset, newest first; show device.label
+send_test(user)                 # number of devices the test push went to
+```
+
+`register_device()` raises `ValueError` for a malformed or unsafe subscription. A known device moves
+to `user`.
+
+## Inbox
+
+```python
+from kvn_notify import inbox
+
+inbox.inbox_items(user, unread_only=False)  # queryset, newest first
+inbox.unread_count(user)
+inbox.mark_read(user, notification_id)      # False if it isn't this user's inbox item
+inbox.mark_all_read(user)                   # how many changed
+inbox.serialize(notification)               # the JSON the endpoints return
+```
+
+## Personal data
+
+```python
+from kvn_notify import export_user_data
+
+export_user_data(user)  # {"devices": [...], "notifications": [...], "preferences": [...]}
+```
+
+JSON-ready data for an "export my data" feature. Push endpoints and keys are left out: they are
+secrets that only work with the server's keys. Deleting a user deletes all of it, so no separate
+delete function is needed.
 
 ## Channels
 

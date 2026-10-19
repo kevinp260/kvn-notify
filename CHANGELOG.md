@@ -24,6 +24,27 @@ a breaking change bumps the first number.
   with an optional `device_name` when subscribing.
 - CSRF works with `CSRF_COOKIE_HTTPONLY = True`: the client falls back to the page's token,
   and accepts a `csrfToken` option.
+- One CSRF rule for every login setup: a changing request without a token header
+  (`TOKEN_HEADERS`, default `Authorization` and `X-Session-Token`) must pass the CSRF check,
+  whatever `AUTH` is. `ENFORCE_CSRF = False` opts out (warning W010). Tested against Django
+  sessions, DRF sessions, Simple JWT, DRF tokens, a proxy, dj-rest-auth's JWT cookie and custom
+  functions. W011 warns about a script-readable session cookie in production.
+- Public functions for apps with their own endpoints: `register_device`, `remove_device`,
+  `remove_devices`, `list_devices`, `send_test` and `kvn_notify.inbox`. In the browser,
+  `createBrowserSubscription()` and `removeBrowserSubscription()`.
+- `LANGUAGE_FOR_USER`: each recipient's push and email are rendered in their language.
+- `REMOVE_DEVICES_ON_PASSWORD_CHANGE` (on by default): a password change removes the user's
+  devices, as Django ends their other sessions.
+- `anotify()` and `acancel()` for async code; `export_user_data(user)` for data exports.
+- `kvn-notify-web`: `needsInstall()` for iPhones and iPads (the button tag shows the hint),
+  `onUnauthorized` to refresh an expired token and retry, and `tokenHeaders`.
+
+### Changed (for apps already on a pre-release commit)
+
+- A custom `AUTH` function now gets the CSRF check too unless the request has a token header.
+  List your login header in `TOKEN_HEADERS` if it isn't `Authorization` or `X-Session-Token`.
+- Changing a password removes that user's devices. Set `REMOVE_DEVICES_ON_PASSWORD_CHANGE = False`
+  to keep the old behaviour.
 
 ### Fixed
 

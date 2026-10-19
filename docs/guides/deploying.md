@@ -21,7 +21,9 @@ Web Push works on iOS and iPadOS 16.4 and newer, but only for sites the user has
 home screen**. In Safari tabs, `kvnNotify.permission()` reports `"unsupported"` until then.
 
 To make that possible your site needs a web app manifest with `"display": "standalone"`, a name
-and icons. Consider showing iPhone users a short hint to use **Share → Add to Home Screen**.
+and icons. Show iPhone users a short hint to use **Share → Add to Home Screen** when
+`client.needsInstall()` is `true`; `{% kvn_notify_button %}` does it for you. See
+[iPhone and iPad](../reference/javascript.md#iphone-and-ipad).
 
 ## Moving an app that already sends push
 
@@ -82,3 +84,17 @@ delivery is locked while it is sent. SQLite works with a single dispatcher.
 
 Old records are deleted after `DELIVERY_RETENTION_DAYS` (90), and inbox items after
 `INBOX_RETENTION_DAYS` (90). Set either to `0` to keep everything.
+
+### Several projects sharing one database
+
+Some setups run more than one Django project on the same database, for example a mobile API, a web
+app and an admin site. kvn-notify works across them as long as:
+
+- **All projects use the same VAPID keys.** A browser subscribed through one project only accepts
+  pushes signed with the keys it subscribed with.
+- **The notification types are registered in the project that calls `notify()`.** Messages are
+  rendered and saved when `notify()` runs, so any project's dispatcher can then send them. Running
+  dispatchers in several projects is safe: each delivery is locked while it is sent.
+
+Schema-per-tenant setups (such as django-tenants) are not supported yet: the dispatcher only sees
+one schema.

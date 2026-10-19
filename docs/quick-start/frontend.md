@@ -106,7 +106,11 @@ export const notify = createClient({ baseUrl: "/api/notify" });
 ```
 
 `baseUrl` is where you included `kvn_notify.urls`. If the API is on another origin, also pass
-`credentials: "include"` for sessions, and allow that origin in your CORS settings.
+`credentials: "include"` for sessions, and allow that origin in your CORS settings. Not sure which
+login suits your app, or using a proxy? See [Which setup should I use?](../guides/login.md#which-setup-should-i-use).
+
+On iPhones and iPads push only works once the site is on the Home Screen: check
+`notify.needsInstall()` and show that hint instead of the button.
 
 ### 9. The service worker
 

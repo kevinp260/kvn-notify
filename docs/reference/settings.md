@@ -42,6 +42,9 @@ KVN_NOTIFY = {
 | --- | --- | --- |
 | `AUTH` | `"auto"` | `"auto"`, `"session"`, `"drf"`, or a dotted path to your function. See [Logins](../guides/login.md). |
 | `PERMISSION` | `None` | Dotted path to a function `(request, user) -> bool`, run after login, e.g. to require 2FA. |
+| `TOKEN_HEADERS` | `("Authorization", "X-Session-Token")` | Headers that carry a login token. Changing requests without one must pass the CSRF check. See [The CSRF rule](../guides/login.md#the-csrf-rule). |
+| `ENFORCE_CSRF` | `True` | `False` turns the CSRF rule off for non-session logins (warning W010). |
+| `REMOVE_DEVICES_ON_PASSWORD_CHANGE` | `True` | Remove a user's devices when their password changes, like Django ends their other sessions. |
 | `INBOX` | `False` | Turn on the in-app list and its endpoints. |
 
 ## Email
@@ -49,6 +52,7 @@ KVN_NOTIFY = {
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `SITE_URL` | `""` | Your public origin, e.g. `"https://app.example.com"`, for links in emails. |
+| `LANGUAGE_FOR_USER` | `None` | Dotted path to a function `(user) -> language code or None`. Each recipient's copy (push and email) is rendered in that language. See [Languages](../guides/languages.md). |
 | `EMAIL["FROM"]` | `DEFAULT_FROM_EMAIL` | Sender address. |
 | `EMAIL["BRAND_NAME"]` | `""` | Shown at the top of emails when there is no logo. |
 | `EMAIL["LOGO_URL"]` | `""` | Full URL of a logo for the top of emails. |

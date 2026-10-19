@@ -9,7 +9,9 @@ class KvnNotifyConfig(AppConfig):
     def ready(self):
         from django.utils.module_loading import autodiscover_modules
 
-        from kvn_notify import checks  # noqa: F401  registers the startup checks
+        from kvn_notify import checks, handlers  # noqa: F401  registers the startup checks
+
+        handlers.connect()
         from kvn_notify.channels import register_builtin_channels
         from kvn_notify.types import NotificationType, register
 

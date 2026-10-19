@@ -1,7 +1,7 @@
 export class KvnNotifyError extends Error {
   /** HTTP status for server errors, 0 otherwise. */
   status: number;
-  /** "http", "unsupported", "permission-denied", "no-service-worker" or "error". */
+  /** "http", "unsupported", "needs-install", "permission-denied", "no-service-worker" or "error". */
   code: string;
 }
 
@@ -20,6 +20,17 @@ export interface ClientOptions {
   serviceWorker?: string;
   /** Milliseconds to wait for a service worker before failing with code "no-service-worker". Default 10000. */
   readyTimeout?: number;
+  /** Headers from getHeaders that carry a login token; requests with one get no CSRF token.
+   * Default ["Authorization", "X-Session-Token"]. Match the server's KVN_NOTIFY["TOKEN_HEADERS"]. */
+  tokenHeaders?: string[];
+  /** Called when a request gets 401, e.g. to refresh an expired token. Return true to retry once. */
+  onUnauthorized?: () => boolean | Promise<boolean>;
+}
+
+export interface BrowserSubscriptionJSON {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys: { p256dh: string; auth: string };
 }
 
 export interface InboxItem {
@@ -51,6 +62,8 @@ export interface PreferenceRow {
 
 export interface KvnNotifyClient {
   isSupported(): boolean;
+  /** True on iPhone/iPad when the site must be added to the Home Screen before push works. */
+  needsInstall(): boolean;
   permission(): NotificationPermission | "unsupported";
   isSubscribed(): Promise<boolean>;
   subscribe(): Promise<PushSubscription>;
@@ -71,4 +84,14 @@ export interface KvnNotifyClient {
 
 export function createClient(options?: ClientOptions): KvnNotifyClient;
 export function isSupported(): boolean;
+/** True on iPhone/iPad when the site must be added to the Home Screen before push works. */
+export function needsInstall(): boolean;
+/** Ask permission and subscribe this browser, without kvn-notify's endpoints. Returns the JSON to send to your server. */
+export function createBrowserSubscription(options: {
+  vapidPublicKey: string;
+  serviceWorker?: string;
+  readyTimeout?: number;
+}): Promise<BrowserSubscriptionJSON>;
+/** Unsubscribe this browser. Returns the endpoint it had, or null. */
+export function removeBrowserSubscription(options?: { serviceWorker?: string; readyTimeout?: number }): Promise<string | null>;
 export function urlBase64ToUint8Array(base64String: string): Uint8Array;

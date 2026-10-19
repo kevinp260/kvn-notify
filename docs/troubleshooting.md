@@ -35,17 +35,22 @@ Or use the package's ready-made worker: `{% kvn_notify_scripts "default" %}`, or
 
 Web Push on iOS and iPadOS needs version 16.4 or newer, and works only after the user adds your
 site to the home screen and opens it from there. See [Deploying](guides/deploying.md#iphones-and-ipads).
+`client.needsInstall()` tells you when to show that hint.
 
 ### Subscribing fails with 403 {#csrf}
 
-With a session login, the request needs Django's CSRF token. The client sends it from the
+Any login without a token header needs Django's CSRF token, including custom functions and JWTs
+in cookies ([the CSRF rule](guides/login.md#the-csrf-rule)). The client sends it from the
 `csrftoken` cookie; if you renamed the cookie, pass `csrfCookieName`. If the frontend is on
-another origin, add it to `CSRF_TRUSTED_ORIGINS` and use `credentials: "include"`.
+another origin, add it to `CSRF_TRUSTED_ORIGINS` and use `credentials: "include"`. If your login
+uses its own header (an API key, say), list it in `TOKEN_HEADERS` on the server and `tokenHeaders`
+in the client.
 
 ### Subscribing fails with 401 {#unauthorized}
 
 The endpoints did not find a logged-in user. With tokens, check that `getHeaders` returns the
-`Authorization` header and that the token is still valid. With `AUTH: "auto"` and Django REST
+`Authorization` header and that the token is still valid; `onUnauthorized` can refresh an expired
+one and retry. With `AUTH: "auto"` and Django REST
 framework installed, your `DEFAULT_AUTHENTICATION_CLASSES` decide who is logged in; see
 [Logins](guides/login.md).
 
@@ -140,3 +145,16 @@ A type includes the `"inbox"` channel, but nothing is stored until you set `"INB
 
 Emails cannot turn relative links into full addresses, so they are sent without a button. Set
 `SITE_URL` to your public address, e.g. `"https://app.example.com"`.
+
+### W010: `ENFORCE_CSRF` is off {#w010}
+
+The endpoints accept changing requests whose login came from a cookie without checking CSRF, so
+another website could make a logged-in visitor's browser subscribe or change preferences. If you
+turned it off because your login uses its own header, list that header in `TOKEN_HEADERS` and
+remove `ENFORCE_CSRF`. See [The CSRF rule](guides/login.md#the-csrf-rule).
+
+### W011: the session cookie is readable by scripts {#w011}
+
+`SESSION_COOKIE_HTTPONLY` is `False` in production, so any script on your pages, including one
+injected through a bug, can read the login cookie and take over the session. Remove the setting
+(Django's default is `True`).

@@ -52,3 +52,17 @@ register(
         tag="incident-{incident_id}",
     )
 )
+
+register(
+    NotificationType(
+        key="i18n.check",
+        channels=["push", "email"],
+        # Callables see the language that is active while this recipient's copy renders.
+        title=lambda context: (
+            f"title in {__import__('django.utils.translation').utils.translation.get_language()}"
+        ),
+        email_subject=lambda context: (
+            f"subject in {__import__('django.utils.translation').utils.translation.get_language()}"
+        ),
+    )
+)

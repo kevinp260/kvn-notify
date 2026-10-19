@@ -38,7 +38,9 @@ nav:
   - Guides:
       - Declaring and sending: guides/sending.md
       - Logins, sessions and tokens: guides/login.md
+      - Using your own endpoints: guides/own-endpoints.md
       - Emails and templates: guides/emails.md
+      - Languages: guides/languages.md
       - The in-app inbox: guides/inbox.md
       - Running the dispatcher: guides/dispatch.md
       - Icons and badges: guides/icons.md

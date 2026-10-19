@@ -20,10 +20,12 @@ const notify = createClient({ baseUrl: "/notify" });
 | `baseUrl` | `"/notify"` | Where `kvn_notify.urls` is included. |
 | `getHeaders` | none | Function returning extra headers per request, e.g. `Authorization`. May be async. |
 | `credentials` | `"same-origin"` | `"include"` for a cookie session on another origin. |
-| `csrfCookieName` | `"csrftoken"` | Django's CSRF cookie, sent as `X-CSRFToken` when there is no `Authorization` header. |
+| `csrfCookieName` | `"csrftoken"` | Django's CSRF cookie, sent as `X-CSRFToken` when there is no token header. |
 | `csrfToken` | none | The CSRF token itself, or a function returning it. Only needed when `CSRF_COOKIE_HTTPONLY = True` and the page has no `csrf-token` meta tag or `csrfmiddlewaretoken` input. |
 | `serviceWorker` | none | URL of a service worker to register, for apps without their own. |
 | `readyTimeout` | `10000` | Milliseconds to wait for a service worker before failing. |
+| `tokenHeaders` | `["Authorization", "X-Session-Token"]` | Headers from `getHeaders` that carry a login token; requests with one get no CSRF token. Match the server's `TOKEN_HEADERS`. |
+| `onUnauthorized` | none | Called when a request gets `401`, e.g. to refresh an expired token. Return `true` (or a promise of it) and the request is retried once, with `getHeaders` run again. |
 
 ## The client
 
@@ -31,6 +33,7 @@ const notify = createClient({ baseUrl: "/notify" });
 | --- | --- | --- |
 | `permission()` | `"granted"`, `"denied"`, `"default"` or `"unsupported"` | |
 | `isSupported()` | `boolean` | `false` in browsers without Web Push, e.g. iPhone Safari before "Add to Home Screen" |
+| `needsInstall()` | `boolean` | `true` on iPhone and iPad when the site must be added to the Home Screen first (iOS 16.4+). Show that hint instead of the button. |
 | `isSubscribed()` | `Promise<boolean>` | |
 | `subscribe()` | `Promise<PushSubscription>` | Call it from a click. Asks permission, subscribes, saves the device. |
 | `unsubscribe()` | `Promise<boolean>` | Call it before logging out. |
@@ -50,6 +53,7 @@ Every failure is a `KvnNotifyError` with a `code`:
 | `code` | When |
 | --- | --- |
 | `"unsupported"` | The browser has no Web Push. |
+| `"needs-install"` | iPhone or iPad: add the site to the Home Screen, then open it from there. |
 | `"permission-denied"` | The user did not allow notifications. |
 | `"no-service-worker"` | No service worker covers the page within `readyTimeout`. |
 | `"http"` | The server answered with an error; `status` and `message` hold its details. |
@@ -62,6 +66,31 @@ try {
   else throw error;
 }
 ```
+
+## Without kvn-notify's endpoints
+
+For apps that save devices through their own endpoints. See
+[Using your own endpoints](../guides/own-endpoints.md).
+
+| Function | Returns | Notes |
+| --- | --- | --- |
+| `createBrowserSubscription({ vapidPublicKey, serviceWorker?, readyTimeout? })` | `Promise<{endpoint, keys}>` | Call it from a click. Asks permission and subscribes this browser; send the result to your server. |
+| `removeBrowserSubscription({ serviceWorker?, readyTimeout? })` | `Promise<string \| null>` | Unsubscribes this browser and returns the endpoint it had, for your server to forget. |
+| `needsInstall()`, `isSupported()` | `boolean` | Also exported on their own. |
+
+## iPhone and iPad
+
+Safari only allows web push for a site added to the Home Screen (iOS 16.4 and later). In a normal
+tab, `needsInstall()` is `true` and `subscribe()` fails with code `"needs-install"`:
+
+```javascript
+if (notify.needsInstall()) {
+  showHint("Tap Share, then Add to Home Screen, and open the app from there.");
+}
+```
+
+In template projects the `{% kvn_notify_button %}` says this by itself; change the text with
+`label_install="..."`.
 
 ## Service worker: `kvn-notify-web/sw`
 

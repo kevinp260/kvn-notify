@@ -1,4 +1,4 @@
-/* kvn-notify-web 0.2.0 (service worker script). Generated from js/src by js/scripts/build-static.mjs; do not edit. */
+/* kvn-notify-web 1.0.0 (service worker script). Generated from js/src by js/scripts/build-static.mjs; do not edit. */
 // In your own service worker: importScripts("/static/kvn_notify/sw.js");
 // Options can be set first: self.KVN_NOTIFY_SW_OPTIONS = { defaultTitle: "My app" };
 (function () {

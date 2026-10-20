@@ -1,6 +1,6 @@
 """Push notifications and emails for Django. Declared once, sent with one line, never lost."""
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "NotificationType",

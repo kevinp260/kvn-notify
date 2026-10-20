@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/kvn-notify)](https://pypi.org/project/kvn-notify/)
 [![Python](https://img.shields.io/pypi/pyversions/kvn-notify)](https://pypi.org/project/kvn-notify/)
 [![Django 5.1+](https://img.shields.io/badge/Django-5.1%2B-0C4B33)](https://www.djangoproject.com/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kevinp260/kvn-notify/blob/main/LICENSE)
 [![Tests](https://github.com/kevinp260/kvn-notify/actions/workflows/tests.yml/badge.svg)](https://github.com/kevinp260/kvn-notify/actions/workflows/tests.yml)
 
 Every Django app that sends Web Push ends up rebuilding the same plumbing: VAPID keys,
@@ -33,7 +33,7 @@ notify(user, "order.shipped", {"order": order})
 
 [Documentation](https://kevinp260.github.io/kvn-notify/) ·
 [Quick start](https://kevinp260.github.io/kvn-notify/quick-start/) ·
-[Changelog](CHANGELOG.md)
+[Changelog](https://kevinp260.github.io/kvn-notify/changelog/)
 
 ## Install
 

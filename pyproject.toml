@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kvn-notify"
-version = "0.1.0"
+version = "1.0.0"
 description = "Push notifications and emails for Django. Declared once, sent with one line, never lost."
 readme = "README.md"
 license = "MIT"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 keywords = ["django", "web push", "notifications", "pwa", "email", "vapid"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
     "Framework :: Django",
     "Framework :: Django :: 5.1",

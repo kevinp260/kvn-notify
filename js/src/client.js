@@ -194,14 +194,18 @@ function sameKey(subscription, keyBytes) {
  * @param {() => (Record<string,string>|Promise<Record<string,string>>)} [options.getHeaders]
  *   Extra headers per request, e.g. async () => ({ Authorization: `Bearer ${token}` }).
  * @param {string} [options.csrfCookieName="csrftoken"] Django's CSRF cookie, sent as X-CSRFToken for sessions.
- * @param {string | (() => string)} [options.csrfToken] The CSRF token itself, for when the cookie is HttpOnly
- *   and the page has no token to read. Otherwise found automatically.
+ * @param {string | (() => (string|Promise<string>))} [options.csrfToken] The CSRF token itself, for when the
+ *   cookie can't be read (HttpOnly, or set on the API's own host) and the page has no token. A function may
+ *   be async, e.g. to fetch the token from your API once. Otherwise found automatically.
  * @param {string} [options.serviceWorker] URL of a service worker to register, if the app has none of its own.
  * @param {number} [options.readyTimeout=10000] Milliseconds to wait for a service worker before failing.
  * @param {string[]} [options.tokenHeaders=["Authorization","X-Session-Token"]] Headers from getHeaders that
  *   carry a login token; requests with one are sent without a CSRF token (match KVN_NOTIFY["TOKEN_HEADERS"]).
  * @param {() => (boolean|Promise<boolean>)} [options.onUnauthorized] Called when a request gets 401, e.g. to
  *   refresh an expired token. Return true and the request is retried once (getHeaders runs again).
+ * @param {() => (boolean|Promise<boolean>)} [options.onCsrfFailure] Called when the server refused only the
+ *   CSRF token (it changes when Django logs someone in), e.g. to drop a cached token. Return true and the
+ *   request is retried once, reading csrfToken again.
  */
 export function createClient(options = {}) {
   const {
@@ -214,17 +218,19 @@ export function createClient(options = {}) {
     readyTimeout = 10000,
     tokenHeaders = DEFAULT_TOKEN_HEADERS,
     onUnauthorized,
+    onCsrfFailure,
   } = options;
   const base = baseUrl.replace(/\/+$/, "");
   const tokenHeaderNames = new Set(tokenHeaders.map((h) => h.toLowerCase()));
 
-  async function request(path, { method = "GET", body } = {}, retried = false) {
+  // `retried` holds the recoveries already tried for this call, so each runs at most once.
+  async function request(path, { method = "GET", body } = {}, retried = {}) {
     const headers = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (getHeaders) Object.assign(headers, await getHeaders());
     const hasToken = Object.entries(headers).some(([h, v]) => v && tokenHeaderNames.has(h.toLowerCase()));
     if (UNSAFE_METHODS.has(method) && !hasToken) {
-      const given = typeof csrfToken === "function" ? csrfToken() : csrfToken;
+      const given = typeof csrfToken === "function" ? await csrfToken() : csrfToken;
       const token = given || readCookie(csrfCookieName) || readPageToken();
       if (token) headers["X-CSRFToken"] = token;
     }
@@ -234,8 +240,8 @@ export function createClient(options = {}) {
       credentials,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (response.status === 401 && onUnauthorized && !retried && (await onUnauthorized())) {
-      return request(path, { method, body }, true);
+    if (response.status === 401 && onUnauthorized && !retried.unauthorized && (await onUnauthorized())) {
+      return request(path, { method, body }, { ...retried, unauthorized: true });
     }
     if (response.status === 204) return null;
     let data = null;
@@ -244,9 +250,13 @@ export function createClient(options = {}) {
     } catch (_error) {
       data = null;
     }
+    const csrfRefused = response.status === 403 && data !== null && data.code === "csrf_failed";
+    if (csrfRefused && onCsrfFailure && !retried.csrf && (await onCsrfFailure())) {
+      return request(path, { method, body }, { ...retried, csrf: true });
+    }
     if (!response.ok) {
       const message = (data && data.error) || `Request failed with status ${response.status}`;
-      throw new KvnNotifyError(message, { status: response.status, code: "http" });
+      throw new KvnNotifyError(message, { status: response.status, code: csrfRefused ? "csrf" : "http" });
     }
     return data;
   }

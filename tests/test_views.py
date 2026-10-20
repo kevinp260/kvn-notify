@@ -69,8 +69,13 @@ def test_subscribe_update_and_unsubscribe(logged_in, user):
 def test_list_and_remove_devices(logged_in, user, other_user):
     import hashlib
 
-    post(logged_in, "/notify/subscriptions/", SUBSCRIPTION, **csrf(logged_in),
-         HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 14) Chrome/141.0 Mobile Safari/537.36")
+    post(
+        logged_in,
+        "/notify/subscriptions/",
+        SUBSCRIPTION,
+        **csrf(logged_in),
+        HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 14) Chrome/141.0 Mobile Safari/537.36",
+    )
     theirs = PushSubscription.objects.create(
         user=other_user, endpoint="https://push.example.com/theirs", p256dh="k", auth="a"
     )

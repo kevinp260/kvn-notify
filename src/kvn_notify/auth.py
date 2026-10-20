@@ -29,11 +29,17 @@ from django.utils.module_loading import import_string
 
 from kvn_notify.conf import notify_settings
 
+CSRF_FAILED = "csrf_failed"
+
 
 class AuthFailed(Exception):
-    def __init__(self, message: str, status: int = 401):
+    """``code`` is sent with the error so clients can tell cases apart; "csrf_failed"
+    means only the CSRF token was refused, and a fresh one will do."""
+
+    def __init__(self, message: str, status: int = 401, code: str | None = None):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 def _mode() -> str:
@@ -88,7 +94,9 @@ def _enforce_csrf(request) -> None:
     rejected = check.process_view(request, None, (), {})
     if rejected is not None:
         raise AuthFailed(
-            "CSRF check failed. Send the X-CSRFToken header with the csrftoken cookie value.", 403
+            "CSRF check failed. Send the X-CSRFToken header with the csrftoken cookie value.",
+            403,
+            code=CSRF_FAILED,
         )
     request._kvn_notify_csrf_checked = True
 
@@ -112,7 +120,10 @@ def _drf_user(request):
     except exceptions.AuthenticationFailed as exc:
         raise AuthFailed(str(exc.detail), 401) from exc
     except exceptions.PermissionDenied as exc:
-        raise AuthFailed(str(exc.detail), 403) from exc
+        # DRF's SessionAuthentication and dj-rest-auth's JWT cookie both refuse a bad
+        # token with "CSRF Failed: <reason>".
+        code = CSRF_FAILED if str(exc.detail).startswith("CSRF Failed") else None
+        raise AuthFailed(str(exc.detail), 403, code=code) from exc
     except exceptions.APIException as exc:
         raise AuthFailed(str(exc.detail), exc.status_code) from exc
     return user

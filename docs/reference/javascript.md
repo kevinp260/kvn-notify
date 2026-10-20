@@ -21,11 +21,12 @@ const notify = createClient({ baseUrl: "/notify" });
 | `getHeaders` | none | Function returning extra headers per request, e.g. `Authorization`. May be async. |
 | `credentials` | `"same-origin"` | `"include"` for a cookie session on another origin. |
 | `csrfCookieName` | `"csrftoken"` | Django's CSRF cookie, sent as `X-CSRFToken` when there is no token header. |
-| `csrfToken` | none | The CSRF token itself, or a function returning it. Only needed when `CSRF_COOKIE_HTTPONLY = True` and the page has no `csrf-token` meta tag or `csrfmiddlewaretoken` input. |
+| `csrfToken` | none | The CSRF token itself, or a function returning it (it may be async, e.g. to fetch it from your API once). Only needed when the page can't read the CSRF cookie (`CSRF_COOKIE_HTTPONLY = True`, or the cookie belongs to the API's own host) and has no `csrf-token` meta tag or `csrfmiddlewaretoken` input. |
 | `serviceWorker` | none | URL of a service worker to register, for apps without their own. |
 | `readyTimeout` | `10000` | Milliseconds to wait for a service worker before failing. |
 | `tokenHeaders` | `["Authorization", "X-Session-Token"]` | Headers from `getHeaders` that carry a login token; requests with one get no CSRF token. Match the server's `TOKEN_HEADERS`. |
 | `onUnauthorized` | none | Called when a request gets `401`, e.g. to refresh an expired token. Return `true` (or a promise of it) and the request is retried once, with `getHeaders` run again. |
+| `onCsrfFailure` | none | Called when the server refused only the CSRF token (Django renews it whenever someone logs in), e.g. to drop a token you cached. Return `true` (or a promise of it) and the request is retried once, reading `csrfToken` again. |
 
 ## The client
 
@@ -71,6 +72,7 @@ Every failure is a `KvnNotifyError` with a `code`:
 | `"needs-install"` | iPhone or iPad: add the site to the Home Screen, then open it from there. |
 | `"permission-denied"` | The user did not allow notifications. |
 | `"no-service-worker"` | No service worker covers the page within `readyTimeout`. |
+| `"csrf"` | The server refused the CSRF token (status `403`), and `onCsrfFailure` didn't fix it. |
 | `"http"` | The server answered with an error; `status` and `message` hold its details. |
 
 ```javascript

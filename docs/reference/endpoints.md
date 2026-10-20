@@ -5,6 +5,8 @@ them for you; this page is for anyone writing their own client.
 
 Every endpoint except the VAPID key needs a logged-in user (see [Logins](../guides/login.md)).
 Errors are JSON: `{"error": "message"}` with status `400`, `401`, `403`, `404`, `405`, `409` or `503`.
+A `403` for a missing or wrong CSRF token also has `"code": "csrf_failed"`, so a client can fetch a
+fresh token and try again.
 
 | Method | Path | Purpose |
 | --- | --- | --- |

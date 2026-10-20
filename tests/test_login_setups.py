@@ -58,7 +58,10 @@ def drf(config):
 def test_django_session_cookie(user):
     client = browser()
     client.force_login(user)
-    assert post(client).status_code == 403
+    refused = post(client)
+    assert refused.status_code == 403
+    # Clients can tell "only the CSRF token was wrong" apart, and fetch a new one.
+    assert refused.json()["code"] == "csrf_failed"
     assert post(client, HTTP_X_CSRFTOKEN=CSRF_TOKEN).status_code == 201
 
 
@@ -76,7 +79,9 @@ def test_drf_session_authentication(user, drf):
     drf("rest_framework.authentication.SessionAuthentication")
     client = browser()
     client.force_login(user)
-    assert post(client).status_code == 403
+    refused = post(client)
+    assert refused.status_code == 403
+    assert refused.json()["code"] == "csrf_failed"  # DRF's own "CSRF Failed: ..." refusal
     assert post(client, HTTP_X_CSRFTOKEN=CSRF_TOKEN).status_code == 201
 
 
@@ -130,6 +135,31 @@ def test_jwt_cookie_needs_csrf_even_when_the_login_library_skips_it(user, drf):
     client.cookies["app-auth"] = str(AccessToken.for_user(user))
     assert post(client).status_code == 403
     assert post(client, HTTP_X_CSRFTOKEN=CSRF_TOKEN).status_code == 201
+
+
+def test_jwt_cookie_with_the_login_librarys_own_csrf_check(user, drf, monkeypatch):
+    """With JWT_AUTH_COOKIE_USE_CSRF on, dj-rest-auth refuses first; the refusal still
+    carries code "csrf_failed" so the browser client knows to fetch a fresh token."""
+    from dj_rest_auth.app_settings import api_settings as rest_auth_settings
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    monkeypatch.setattr(rest_auth_settings, "JWT_AUTH_COOKIE_USE_CSRF", True, raising=False)
+    drf("dj_rest_auth.jwt_auth.JWTCookieAuthentication")
+    client = browser()
+    client.cookies["app-auth"] = str(AccessToken.for_user(user))
+    refused = post(client)
+    assert refused.status_code == 403
+    assert refused.json()["code"] == "csrf_failed"
+    assert post(client, HTTP_X_CSRFTOKEN=CSRF_TOKEN).status_code == 201
+
+
+def test_other_refusals_carry_no_csrf_code(user, config):
+    with config(PERMISSION=lambda request, user: False):
+        client = Client()
+        client.force_login(user)
+        refused = client.get(URL)
+    assert refused.status_code == 403
+    assert "code" not in refused.json()
 
 
 # 6. Custom login functions ----------------------------------------------------

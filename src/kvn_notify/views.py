@@ -20,8 +20,11 @@ from kvn_notify.devices import send_test as send_test_push
 from kvn_notify.exceptions import KvnNotifyError
 
 
-def _error(message: str, status: int) -> JsonResponse:
-    return JsonResponse({"error": message}, status=status)
+def _error(message: str, status: int, code: str | None = None) -> JsonResponse:
+    body = {"error": message}
+    if code:
+        body["code"] = code
+    return JsonResponse(body, status=status)
 
 
 def _json_body(request) -> dict:
@@ -50,7 +53,7 @@ def endpoint(*methods: str, auth: bool = True, inbox: bool = False):
                 try:
                     request.notify_user = get_user(request)
                 except AuthFailed as exc:
-                    return _error(str(exc), exc.status)
+                    return _error(str(exc), exc.status, exc.code)
             try:
                 return view(request, *args, **kwargs)
             except ValueError as exc:

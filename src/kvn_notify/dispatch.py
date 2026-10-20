@@ -266,7 +266,5 @@ def cleanup() -> int:
 
     days = notify_settings.INACTIVE_DEVICE_RETENTION_DAYS
     if days:
-        PushSubscription.objects.filter(
-            active=False, disabled_at__lt=now - timedelta(days=days)
-        ).delete()
+        PushSubscription.objects.filter(active=False, disabled_at__lt=now - timedelta(days=days)).delete()
     return removed

@@ -1,4 +1,4 @@
-/* kvn-notify-web 0.2.0 (browser script). Generated from js/src by js/scripts/build-static.mjs; do not edit. */
+/* kvn-notify-web 1.0.0 (browser script). Generated from js/src by js/scripts/build-static.mjs; do not edit. */
 (function () {
 "use strict";
 // kvn-notify-web: the browser half of kvn-notify. No dependencies, no framework.

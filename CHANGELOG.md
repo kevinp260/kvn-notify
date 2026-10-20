@@ -5,6 +5,12 @@ a breaking change bumps the first number.
 
 ## Unreleased
 
+## 1.0.0 (2026-10-20)
+
+The first release on PyPI (`kvn-notify`) and npm (`kvn-notify-web`), after running in five
+apps: email (LMS), push with JWT through a proxy (Trippy), the inbox and push with a JWT
+cookie (PetPal), the simple worker (Matchday) and Celery (Uptime Monitor).
+
 ### Added
 
 - `notify()` and `NotificationType`: declare a notification once, send it with one line.

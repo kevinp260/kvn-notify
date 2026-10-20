@@ -148,7 +148,33 @@ it only shows what arrives.
     The server needs CORS with credentials allowed (django-cors-headers:
     `CORS_ALLOW_CREDENTIALS = True`) and the frontend's address in `CSRF_TRUSTED_ORIGINS`. The page
     can only read the `csrftoken` cookie if Django sets it for the shared parent domain
-    (`CSRF_COOKIE_DOMAIN = ".example.com"`); otherwise pass `csrfToken`.
+    (`CSRF_COOKIE_DOMAIN = ".example.com"`). If it stays on the API's host (for example because the
+    Django admin lives there too), have a view return the token and pass it as `csrfToken`:
+
+    ```python
+    # views.py, routed at /api/csrf/
+    from django.http import JsonResponse
+    from django.middleware.csrf import get_token
+
+    def csrf(request):
+        return JsonResponse({"csrfToken": get_token(request)})  # also sets the cookie
+    ```
+
+    ```javascript
+    let token = null;
+    const notify = createClient({
+      baseUrl: "https://api.example.com/notify",
+      credentials: "include",
+      csrfToken: async () => (token ??= fetch("https://api.example.com/api/csrf/", { credentials: "include" })
+        .then((response) => response.json())
+        .then((data) => data.csrfToken)),
+      // Django renews the token when someone logs in: drop it and try once more.
+      onCsrfFailure: () => {
+        token = null;
+        return true;
+      },
+    });
+    ```
 
 === "Token in a header"
 

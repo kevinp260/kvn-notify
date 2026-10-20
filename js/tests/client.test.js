@@ -110,6 +110,48 @@ test("a csrfToken option is used first", async () => {
   assert.equal(requests[0].headers["X-CSRFToken"], "given");
 });
 
+test("csrfToken may be async, e.g. fetched from the API once", async () => {
+  await createClient({ csrfToken: async () => "fetched" }).sendTest();
+  assert.equal(requests[0].headers["X-CSRFToken"], "fetched");
+});
+
+test("a refused CSRF token is renewed and the request retried once", async () => {
+  responses.push({ status: 403, body: { error: "CSRF Failed: CSRF token incorrect.", code: "csrf_failed" } });
+  let token = "stale";
+  let failures = 0;
+  const notify = createClient({
+    csrfToken: async () => token,
+    onCsrfFailure: () => {
+      failures += 1;
+      token = "fresh";
+      return true;
+    },
+  });
+  await notify.inbox.markAllRead();
+  assert.equal(failures, 1);
+  assert.deepEqual(
+    requests.map((r) => r.headers["X-CSRFToken"]),
+    ["stale", "fresh"],
+  );
+});
+
+test("a CSRF refusal is retried only once, and reported as code csrf", async () => {
+  const refusal = { status: 403, body: { error: "CSRF check failed.", code: "csrf_failed" } };
+  responses.push(refusal, refusal);
+  const notify = createClient({ onCsrfFailure: () => true });
+  await assert.rejects(notify.sendTest(), (error) => error.code === "csrf" && error.status === 403);
+  assert.equal(requests.length, 2);
+});
+
+test("other 403s are not treated as CSRF", async () => {
+  responses.push({ status: 403, body: { error: "You do not have permission." } });
+  let called = false;
+  const notify = createClient({ onCsrfFailure: () => (called = true) });
+  await assert.rejects(notify.sendTest(), (error) => error.code === "http");
+  assert.equal(called, false);
+  assert.equal(requests.length, 1);
+});
+
 // A fake browser for the tests below: window, navigator and Notification, put back afterwards.
 async function inBrowser({ userAgent = "Mozilla/5.0 (X11; Linux x86_64)", push = true, standalone = false, reg }, fn) {
   const saved = { window: globalThis.window, navigator: globalThis.navigator, Notification: globalThis.Notification };

@@ -44,6 +44,9 @@ a breaking change bumps the first number.
   subscription when it removes its own. Push addresses are never returned, only a hash.
 - `INACTIVE_DEVICE_RETENTION_DAYS` (30 by default): devices the push service rejected for good
   are deleted this long after, by the worker's hourly cleanup.
+- A refused CSRF token is reported as `"code": "csrf_failed"` in the error body. In the browser,
+  `csrfToken` may be an async function (fetch the token from your API once) and
+  `onCsrfFailure` renews it and retries once; such errors have `code` `"csrf"`.
 
 ### Changed (for apps already on a pre-release commit)
 

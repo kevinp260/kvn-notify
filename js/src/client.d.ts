@@ -1,7 +1,8 @@
 export class KvnNotifyError extends Error {
   /** HTTP status for server errors, 0 otherwise. */
   status: number;
-  /** "http", "unsupported", "needs-install", "permission-denied", "no-service-worker" or "error". */
+  /** "http", "csrf" (only the CSRF token was refused), "unsupported", "needs-install", "permission-denied",
+   * "no-service-worker" or "error". */
   code: string;
 }
 
@@ -14,8 +15,9 @@ export interface ClientOptions {
   getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   /** Django's CSRF cookie name, sent as X-CSRFToken for session logins. Default "csrftoken". */
   csrfCookieName?: string;
-  /** The CSRF token, for when the cookie is HttpOnly and the page has no token to read. */
-  csrfToken?: string | (() => string);
+  /** The CSRF token, for when the cookie can't be read (HttpOnly, or on the API's own host) and the page
+   * has no token. A function may be async, e.g. to fetch it from your API once. */
+  csrfToken?: string | (() => string | Promise<string>);
   /** URL of a service worker to register, for apps without one of their own. */
   serviceWorker?: string;
   /** Milliseconds to wait for a service worker before failing with code "no-service-worker". Default 10000. */
@@ -25,6 +27,9 @@ export interface ClientOptions {
   tokenHeaders?: string[];
   /** Called when a request gets 401, e.g. to refresh an expired token. Return true to retry once. */
   onUnauthorized?: () => boolean | Promise<boolean>;
+  /** Called when the server refused only the CSRF token (Django renews it on login), e.g. to drop a cached
+   * token. Return true to retry once, reading csrfToken again. */
+  onCsrfFailure?: () => boolean | Promise<boolean>;
 }
 
 export interface BrowserSubscriptionJSON {
